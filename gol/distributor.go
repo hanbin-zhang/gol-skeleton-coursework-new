@@ -1,8 +1,8 @@
 package gol
 
 import (
-	"fmt"
 	"strconv"
+	"time"
 	"uk.ac.bris.cs/gameoflife/util"
 )
 
@@ -13,6 +13,14 @@ type distributorChannels struct {
 	ioFilename chan<- string
 	ioOutput   chan<- uint8
 	ioInput    <-chan uint8
+}
+
+func timer(p Params, currentState *[][]uint8, turns *int, eventChan chan<- Event) {
+	for {
+		time.Sleep(2 * time.Second)
+		number := len(calculateAliveCells(p, *currentState))
+		eventChan <- AliveCellsCount{CellsCount: number, CompletedTurns: *turns}
+	}
 }
 
 func makeImmutableMatrix(matrix [][]uint8) func(y, x int) uint8 {
@@ -44,24 +52,26 @@ func calculateAliveCells(p Params, world [][]byte) []util.Cell {
 	return list
 }
 
+func worker(startY, endY, startX, endX int, data func(y, x int) uint8, out chan<- [][]uint8, p Params) {
+	work := calculateNextState(startY, endY, startX, endX, data, p)
+	out <- work
+}
+
 func calculateNextState(startY, endY, startX, endX int, data func(y, x int) uint8, p Params) [][]uint8 {
 	height := endY - startY
 	width := endX - startX
 
-	fmt.Println(height)
-	fmt.Println(width)
 	nextSLice := makeNewWorld(height, width)
-	numberLive := 0
 
 	for i := startY; i < endY; i++ {
 		for j := startX; j < endX; j++ {
-			for k := i - 1; k <= i+1; k++ {
-				for l := j - 1; l <= j+1; l++ {
+			numberLive := 0
+			for _, l := range [3]int{j - 1, j, j + 1} {
+				for _, k := range [3]int{i - 1, i, i + 1} {
 					newK := (k + p.ImageHeight) % p.ImageHeight
 					newL := (l + p.ImageWidth) % p.ImageWidth
-
 					if data(newK, newL) == 255 {
-						numberLive += 1
+						numberLive++
 
 					}
 				}
@@ -96,31 +106,55 @@ func distributor(p Params, c distributorChannels) {
 	c.ioFilename <- filename
 
 	// TODO: Create a 2D slice to store the world.
-	initWorld := makeNewWorld(p.ImageHeight, p.ImageWidth)
+	world := makeNewWorld(p.ImageHeight, p.ImageWidth)
 	for h := 0; h < p.ImageHeight; h++ {
 		for w := 0; w < p.ImageWidth; w++ {
-			initWorld[h][w] = <-c.ioInput
+			world[h][w] = <-c.ioInput
 		}
 	}
 
 	turn := 0
-	world := initWorld
+
+	// set the timer
+	go timer(p, &world, &turn, c.events)
 
 	// TODO: Execute all turns of the Game of Life.
 	// iterate through the turns
 	for t := 1; t <= p.Turns; t++ {
-		newWorld := makeNewWorld(p.ImageHeight, p.ImageWidth)
 		data := makeImmutableMatrix(world)
 		// iterate through the cells
+		var newPixelData [][]uint8
 		if p.Threads == 1 {
-			world = calculateNextState(0, p.ImageHeight, 0, p.ImageWidth, data, p)
+			newPixelData = calculateNextState(0, p.ImageHeight, 0, p.ImageWidth, data, p)
+
 		} else {
-			world = newWorld
+			ChanSlice := make([]chan [][]uint8, p.Threads)
+			for i := 0; i < p.Threads; i++ {
+				ChanSlice[i] = make(chan [][]uint8)
+			}
+			for i := 0; i < p.Threads-1; i++ {
+				go worker(int(float32(p.ImageHeight)*(float32(i)/float32(p.Threads))),
+					int(float32(p.ImageHeight)*(float32(i+1)/float32(p.Threads))),
+					0, p.ImageWidth, data, ChanSlice[i], p)
+			}
+			go worker(int(float32(p.ImageHeight)*(float32(p.Threads-1)/float32(p.Threads))),
+				p.ImageHeight,
+				0, p.ImageWidth, data, ChanSlice[p.Threads-1], p)
+			makeImmutableMatrix(newPixelData)
+			for i := 0; i < p.Threads; i++ {
+
+				part := <-ChanSlice[i]
+
+				newPixelData = append(newPixelData, part...)
+			}
 		}
+		turn++
+		world = newPixelData
 	}
 
+	// HANBIN: sometimes, is just not too good to to something too early
 	c.ioCommand <- ioOutput
-	outputFilename := strconv.Itoa(p.ImageHeight) + "x" + strconv.Itoa(p.ImageWidth) + "_output"
+	outputFilename := strconv.Itoa(p.ImageHeight) + "x" + strconv.Itoa(p.ImageWidth) + "x" + strconv.Itoa(turn)
 	c.ioFilename <- outputFilename
 	for _, column := range world {
 		for cell, _ := range column {
@@ -129,6 +163,7 @@ func distributor(p Params, c distributorChannels) {
 	}
 	// TODO: output proceeded map IO
 	// TODO: Report the final state using FinalTurnCompleteEvent.
+
 	c.events <- FinalTurnComplete{CompletedTurns: p.Turns, Alive: calculateAliveCells(p, world)}
 
 	// Make sure that the Io has finished any output before exiting.
