@@ -1,7 +1,6 @@
 package gol
 
 import (
-	"fmt"
 	"reflect"
 	"strconv"
 	"time"
@@ -211,9 +210,9 @@ func distributor(p Params, c distributorChannels) {
 	// Make sure that the Io has finished any output before exiting.
 	c.ioCommand <- ioCheckIdle
 	<-c.ioIdle
-	fmt.Println("idle")
+
 	c.events <- StateChange{turn, Quitting}
-	fmt.Println("quiting")
+
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 	isEventClosed = true
 	close(c.events)
