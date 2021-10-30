@@ -1,10 +1,15 @@
 package gol
 
 import (
+	"fmt"
+	"reflect"
 	"strconv"
 	"time"
 	"uk.ac.bris.cs/gameoflife/util"
+	"unsafe"
 )
+
+var isEventClosed bool
 
 type distributorChannels struct {
 	events     chan<- Event
@@ -15,11 +20,45 @@ type distributorChannels struct {
 	ioInput    <-chan uint8
 }
 
+// cited from stackoverflow
+func isChanClosed(ch interface{}) bool {
+	if reflect.TypeOf(ch).Kind() != reflect.Chan {
+		panic("only channels!")
+	}
+
+	// get interface value pointer, from cgo_export
+	// typedef struct { void *t; void *v; } GoInterface;
+	// then get channel real pointer
+	cptr := *(*uintptr)(unsafe.Pointer(
+		unsafe.Pointer(uintptr(unsafe.Pointer(&ch)) + unsafe.Sizeof(uint(0))),
+	))
+
+	// this function will return true if chan.closed > 0
+	// see hchan on https://github.com/golang/go/blob/master/src/runtime/chan.go
+	// type hchan struct {
+	// qcount   uint           // total data in the queue
+	// dataqsiz uint           // size of the circular queue
+	// buf      unsafe.Pointer // points to an array of dataqsiz elements
+	// elemsize uint16
+	// closed   uint32
+	// **
+
+	cptr += unsafe.Sizeof(uint(0)) * 2
+	cptr += unsafe.Sizeof(unsafe.Pointer(uintptr(0)))
+	cptr += unsafe.Sizeof(uint16(0))
+	return *(*uint32)(unsafe.Pointer(cptr)) > 0
+}
+
 func timer(p Params, currentState *[][]uint8, turns *int, eventChan chan<- Event) {
 	for {
 		time.Sleep(2 * time.Second)
 		number := len(calculateAliveCells(p, *currentState))
-		eventChan <- AliveCellsCount{CellsCount: number, CompletedTurns: *turns}
+
+		if !isChanClosed(eventChan) {
+			eventChan <- AliveCellsCount{CellsCount: number, CompletedTurns: *turns}
+		} else {
+			return
+		}
 	}
 }
 
@@ -99,6 +138,7 @@ func calculateNextState(startY, endY, startX, endX int, data func(y, x int) uint
 
 // distributor divides the work between workers and interacts with other goroutines.
 func distributor(p Params, c distributorChannels) {
+	isEventClosed = false
 	// let io start input
 	c.ioCommand <- ioInput
 	// HANBIN: send to the io goroutine the file name specified by the width and height
@@ -120,47 +160,49 @@ func distributor(p Params, c distributorChannels) {
 
 	// TODO: Execute all turns of the Game of Life.
 	// iterate through the turns
-	for t := 1; t <= p.Turns; t++ {
-		data := makeImmutableMatrix(world)
-		// iterate through the cells
-		var newPixelData [][]uint8
-		if p.Threads == 1 {
-			newPixelData = calculateNextState(0, p.ImageHeight, 0, p.ImageWidth, data, p)
+	if p.Turns > 0 {
+		for t := 1; t <= p.Turns; t++ {
+			data := makeImmutableMatrix(world)
+			// iterate through the cells
+			var newPixelData [][]uint8
+			if p.Threads == 1 {
+				newPixelData = calculateNextState(0, p.ImageHeight, 0, p.ImageWidth, data, p)
 
-		} else {
-			ChanSlice := make([]chan [][]uint8, p.Threads)
-			for i := 0; i < p.Threads; i++ {
-				ChanSlice[i] = make(chan [][]uint8)
-			}
-			for i := 0; i < p.Threads-1; i++ {
-				go worker(int(float32(p.ImageHeight)*(float32(i)/float32(p.Threads))),
-					int(float32(p.ImageHeight)*(float32(i+1)/float32(p.Threads))),
-					0, p.ImageWidth, data, ChanSlice[i], p)
-			}
-			go worker(int(float32(p.ImageHeight)*(float32(p.Threads-1)/float32(p.Threads))),
-				p.ImageHeight,
-				0, p.ImageWidth, data, ChanSlice[p.Threads-1], p)
-			makeImmutableMatrix(newPixelData)
-			for i := 0; i < p.Threads; i++ {
+			} else {
+				ChanSlice := make([]chan [][]uint8, p.Threads)
+				for i := 0; i < p.Threads; i++ {
+					ChanSlice[i] = make(chan [][]uint8)
+				}
+				for i := 0; i < p.Threads-1; i++ {
+					go worker(int(float32(p.ImageHeight)*(float32(i)/float32(p.Threads))),
+						int(float32(p.ImageHeight)*(float32(i+1)/float32(p.Threads))),
+						0, p.ImageWidth, data, ChanSlice[i], p)
+				}
+				go worker(int(float32(p.ImageHeight)*(float32(p.Threads-1)/float32(p.Threads))),
+					p.ImageHeight,
+					0, p.ImageWidth, data, ChanSlice[p.Threads-1], p)
+				makeImmutableMatrix(newPixelData)
+				for i := 0; i < p.Threads; i++ {
 
-				part := <-ChanSlice[i]
+					part := <-ChanSlice[i]
 
-				newPixelData = append(newPixelData, part...)
+					newPixelData = append(newPixelData, part...)
+				}
 			}
+			turn++
+			world = newPixelData
 		}
-		turn++
-		world = newPixelData
 	}
-
 	// HANBIN: sometimes, is just not too good to to something too early
 	c.ioCommand <- ioOutput
 	outputFilename := strconv.Itoa(p.ImageHeight) + "x" + strconv.Itoa(p.ImageWidth) + "x" + strconv.Itoa(turn)
 	c.ioFilename <- outputFilename
-	for _, column := range world {
-		for cell, _ := range column {
-			c.ioOutput <- uint8(cell)
+	for y := 0; y < p.ImageHeight; y++ {
+		for x := 0; x < p.ImageWidth; x++ {
+			c.ioOutput <- world[y][x]
 		}
 	}
+
 	// TODO: output proceeded map IO
 	// TODO: Report the final state using FinalTurnCompleteEvent.
 
@@ -169,9 +211,11 @@ func distributor(p Params, c distributorChannels) {
 	// Make sure that the Io has finished any output before exiting.
 	c.ioCommand <- ioCheckIdle
 	<-c.ioIdle
-
+	fmt.Println("idle")
 	c.events <- StateChange{turn, Quitting}
-
+	fmt.Println("quiting")
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
+	isEventClosed = true
 	close(c.events)
+
 }

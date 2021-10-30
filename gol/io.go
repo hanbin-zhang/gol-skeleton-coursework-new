@@ -40,6 +40,7 @@ const (
 
 // writePgmImage receives an array of bytes and writes it to a pgm file.
 func (io *ioState) writePgmImage() {
+
 	_ = os.Mkdir("out", os.ModePerm)
 
 	// Request a filename from the distributor.
@@ -72,14 +73,14 @@ func (io *ioState) writePgmImage() {
 			world[y][x] = val
 		}
 	}
-
+	fmt.Println("aaa")
 	for y := 0; y < io.params.ImageHeight; y++ {
 		for x := 0; x < io.params.ImageWidth; x++ {
 			_, ioError = file.Write([]byte{world[y][x]})
 			util.Check(ioError)
 		}
 	}
-
+	fmt.Println("bbb")
 	ioError = file.Sync()
 	util.Check(ioError)
 
