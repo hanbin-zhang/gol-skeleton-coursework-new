@@ -73,14 +73,14 @@ func (io *ioState) writePgmImage() {
 			world[y][x] = val
 		}
 	}
-	fmt.Println("aaa")
+
 	for y := 0; y < io.params.ImageHeight; y++ {
 		for x := 0; x < io.params.ImageWidth; x++ {
 			_, ioError = file.Write([]byte{world[y][x]})
 			util.Check(ioError)
 		}
 	}
-	fmt.Println("bbb")
+
 	ioError = file.Sync()
 	util.Check(ioError)
 
