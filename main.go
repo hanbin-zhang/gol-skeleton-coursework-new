@@ -60,9 +60,6 @@ func main() {
 		for !complete {
 			event := <-events
 			switch event.(type) {
-			/*case gol.AliveCellsCount:
-			fmt.Println(event.GetCompletedTurns(), " turns now")
-			fmt.Println(event.String(), " cells alive")*/
 			case gol.FinalTurnComplete:
 				complete = true
 			}
