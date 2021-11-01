@@ -48,12 +48,12 @@ func isChanClosed(ch interface{}) bool {
 	return *(*uint32)(unsafe.Pointer(cptr)) > 0
 }
 
-func timer(p Params, currentState *[][]uint8, turns *int, eventChan chan<- Event) {
+func timer(p Params, currentState *[][]uint8, turns *int, eventChan chan<- Event, isEventChannelClosed *bool) {
 	for {
 		time.Sleep(2 * time.Second)
 		number := len(calculateAliveCells(p, *currentState))
 
-		if !isChanClosed(eventChan) {
+		if !*isEventChannelClosed {
 			eventChan <- AliveCellsCount{CellsCount: number, CompletedTurns: *turns}
 		} else {
 			return
@@ -110,7 +110,6 @@ func calculateNextState(startY, endY, startX, endX int, data func(y, x int) uint
 					newL := (l + p.ImageWidth) % p.ImageWidth
 					if data(newK, newL) == 255 {
 						numberLive++
-
 					}
 				}
 			}
@@ -137,7 +136,7 @@ func calculateNextState(startY, endY, startX, endX int, data func(y, x int) uint
 
 // distributor divides the work between workers and interacts with other goroutines.
 func distributor(p Params, c distributorChannels) {
-	isEventClosed = false
+	isEventChannelClosed := false
 	// let io start input
 	c.ioCommand <- ioInput
 	// HANBIN: send to the io goroutine the file name specified by the width and height
@@ -155,7 +154,7 @@ func distributor(p Params, c distributorChannels) {
 	turn := 0
 
 	// set the timer
-	go timer(p, &world, &turn, c.events)
+	go timer(p, &world, &turn, c.events, &isEventChannelClosed)
 
 	// TODO: Execute all turns of the Game of Life.
 	// iterate through the turns
@@ -214,7 +213,7 @@ func distributor(p Params, c distributorChannels) {
 	c.events <- StateChange{turn, Quitting}
 
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
-	isEventClosed = true
+	isEventChannelClosed = true
 	close(c.events)
 
 }
