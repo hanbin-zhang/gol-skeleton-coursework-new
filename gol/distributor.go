@@ -1,8 +1,8 @@
 package gol
 
 import (
+	"github.com/ChrisGora/semaphore"
 	"strconv"
-	"sync"
 	"time"
 	"uk.ac.bris.cs/gameoflife/util"
 )
@@ -16,17 +16,17 @@ type distributorChannels struct {
 	ioInput    <-chan uint8
 }
 
-var readMutex sync.Mutex
+var readMutex semaphore.Semaphore
 
 func timer(p Params, currentState *[][]uint8, turns *int, eventChan chan<- Event, isEventChannelClosed *bool) {
 	for {
 		time.Sleep(2 * time.Second)
 
 		if !*isEventChannelClosed {
-			readMutex.Lock()
+			readMutex.Wait()
 			number := len(calculateAliveCells(p, *currentState))
 			eventChan <- AliveCellsCount{CellsCount: number, CompletedTurns: *turns}
-			readMutex.Unlock()
+			readMutex.Post()
 		} else {
 			return
 		}
@@ -119,6 +119,8 @@ func calculateNextState(startY, endY, startX, endX int, data func(y, x int) uint
 // distributor divides the work between workers and interacts with other goroutines.
 func distributor(p Params, c distributorChannels) {
 
+	readMutex = semaphore.Init(1, 1)
+
 	isEventChannelClosed := false
 	// let io start input
 	c.ioCommand <- ioInput
@@ -207,9 +209,9 @@ func distributor(p Params, c distributorChannels) {
 		}
 		c.events <- TurnComplete{CompletedTurns: turn}
 		turn++
-		readMutex.Lock()
+		readMutex.Wait()
 		world = newPixelData
-		readMutex.Unlock()
+		readMutex.Post()
 	}
 	// HANBIN: sometimes, is just not too good to to something too early
 	c.ioCommand <- ioOutput
