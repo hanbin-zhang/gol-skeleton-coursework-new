@@ -25,12 +25,12 @@ func timer(p Params, currentState *[][]uint8, turns *int, eventChan chan<- Event
 		time.Sleep(2 * time.Second)
 
 		if !*isEventChannelClosed {
-			/*readMutex.Wait()
-			realReadMutex.Lock()*/
+			readMutex.Wait()
+			realReadMutex.Lock()
 			number := len(calculateAliveCells(p, *currentState))
 			eventChan <- AliveCellsCount{CellsCount: number, CompletedTurns: *turns}
-			/*realReadMutex.Unlock()
-			readMutex.Post()*/
+			realReadMutex.Unlock()
+			readMutex.Post()
 		} else {
 			return
 		}
@@ -213,11 +213,11 @@ func distributor(p Params, c distributorChannels) {
 		}*/
 		c.events <- TurnComplete{CompletedTurns: turn}
 		turn++
-		/*readMutex.Wait()
-		realReadMutex.Lock()*/
+		readMutex.Wait()
+		realReadMutex.Lock()
 		world = newPixelData
-		/*realReadMutex.Unlock()
-		readMutex.Post()*/
+		realReadMutex.Unlock()
+		readMutex.Post()
 	}
 	// HANBIN: sometimes, is just not too good to to something too early
 	c.ioCommand <- ioOutput
