@@ -1,7 +1,6 @@
 package gol
 
 import (
-	"fmt"
 	"strconv"
 	"time"
 	"uk.ac.bris.cs/gameoflife/util"
@@ -58,18 +57,17 @@ func calculateAliveCells(p Params, world [][]byte) []util.Cell {
 	return list
 }
 
-func worker(startY, endY, startX, endX int, data func(y, x int) uint8, out chan<- [][]uint8, p Params, fcc chan []util.Cell, c distributorChannels, turn int) {
-	work, workFlipped := calculateNextState(startY, endY, startX, endX, data, p, c, turn)
+func worker(startY, endY, startX, endX int, data func(y, x int) uint8, out chan<- [][]uint8, p Params) {
+	work := calculateNextState(startY, endY, startX, endX, data, p)
 	out <- work
-	fcc <- workFlipped
 }
 
-func calculateNextState(startY, endY, startX, endX int, data func(y, x int) uint8, p Params, c distributorChannels, turn int) ([][]uint8, []util.Cell) {
+func calculateNextState(startY, endY, startX, endX int, data func(y, x int) uint8, p Params) [][]uint8 {
 	height := endY - startY
 	width := endX - startX
 
 	nextSLice := makeNewWorld(height, width)
-	var flippedCell []util.Cell
+
 	for i := startY; i < endY; i++ {
 		for j := startX; j < endX; j++ {
 			numberLive := 0
@@ -86,35 +84,25 @@ func calculateNextState(startY, endY, startX, endX int, data func(y, x int) uint
 				numberLive -= 1
 				if numberLive < 2 {
 					nextSLice[i-startY][j-startX] = 0
-					cell := util.Cell{X: j, Y: i}
-					flippedCell = append(flippedCell, cell)
-					c.events <- CellFlipped{Cell: cell, CompletedTurns: turn}
 				} else if numberLive > 3 {
 					nextSLice[i-startY][j-startX] = 0
-					cell := util.Cell{X: j, Y: i}
-					flippedCell = append(flippedCell, cell)
-					c.events <- CellFlipped{Cell: cell, CompletedTurns: turn}
 				} else {
 					nextSLice[i-startY][j-startX] = 255
 				}
 			} else {
 				if numberLive == 3 {
 					nextSLice[i-startY][j-startX] = 255
-					cell := util.Cell{X: j, Y: i}
-					flippedCell = append(flippedCell, cell)
-					c.events <- CellFlipped{Cell: cell, CompletedTurns: turn}
 				} else {
 					nextSLice[i-startY][j-startX] = 0
 				}
 			}
 		}
 	}
-	return nextSLice, flippedCell
+	return nextSLice
 }
 
 // distributor divides the work between workers and interacts with other goroutines.
 func distributor(p Params, c distributorChannels) {
-	fmt.Println(p.Turns)
 	isEventChannelClosed := false
 	// let io start input
 	c.ioCommand <- ioInput
@@ -132,64 +120,43 @@ func distributor(p Params, c distributorChannels) {
 
 	turn := 0
 
-	for _, cell := range calculateAliveCells(p, world) {
-		c.events <- CellFlipped{
-			CompletedTurns: turn,
-			Cell:           cell,
-		}
-	}
-	c.events <- TurnComplete{CompletedTurns: turn}
-
 	// set the timer
 	go timer(p, &world, &turn, c.events, &isEventChannelClosed)
 
 	// TODO: Execute all turns of the Game of Life.
 	// iterate through the turns
-	for t := 1; t <= p.Turns; t++ {
+	if p.Turns > 0 {
+		for t := 1; t <= p.Turns; t++ {
+			data := makeImmutableMatrix(world)
+			// iterate through the cells
+			var newPixelData [][]uint8
+			if p.Threads == 1 {
+				newPixelData = calculateNextState(0, p.ImageHeight, 0, p.ImageWidth, data, p)
 
-		data := makeImmutableMatrix(world)
-		// iterate through the cells
-		var newPixelData [][]uint8
-		var flipped []util.Cell
-		if p.Threads == 1 {
-			newPixelData, flipped = calculateNextState(0, p.ImageHeight, 0, p.ImageWidth, data, p, c, turn)
-		} else {
-			ChanSlice := make([]chan [][]uint8, p.Threads)
-			flippedCellChanSlice := make([]chan []util.Cell, p.Threads)
-			for i := 0; i < p.Threads; i++ {
-				ChanSlice[i] = make(chan [][]uint8)
-				flippedCellChanSlice[i] = make(chan []util.Cell)
-			}
-			for i := 0; i < p.Threads-1; i++ {
-				go worker(int(float32(p.ImageHeight)*(float32(i)/float32(p.Threads))),
-					int(float32(p.ImageHeight)*(float32(i+1)/float32(p.Threads))),
-					0, p.ImageWidth, data, ChanSlice[i], p, flippedCellChanSlice[i], c, turn)
-			}
-			go worker(int(float32(p.ImageHeight)*(float32(p.Threads-1)/float32(p.Threads))),
-				p.ImageHeight,
-				0, p.ImageWidth, data, ChanSlice[p.Threads-1], p, flippedCellChanSlice[p.Threads-1], c, turn)
-			makeImmutableMatrix(newPixelData)
-			for i := 0; i < p.Threads; i++ {
+			} else {
+				ChanSlice := make([]chan [][]uint8, p.Threads)
+				for i := 0; i < p.Threads; i++ {
+					ChanSlice[i] = make(chan [][]uint8)
+				}
+				for i := 0; i < p.Threads-1; i++ {
+					go worker(int(float32(p.ImageHeight)*(float32(i)/float32(p.Threads))),
+						int(float32(p.ImageHeight)*(float32(i+1)/float32(p.Threads))),
+						0, p.ImageWidth, data, ChanSlice[i], p)
+				}
+				go worker(int(float32(p.ImageHeight)*(float32(p.Threads-1)/float32(p.Threads))),
+					p.ImageHeight,
+					0, p.ImageWidth, data, ChanSlice[p.Threads-1], p)
+				makeImmutableMatrix(newPixelData)
+				for i := 0; i < p.Threads; i++ {
 
-				part := <-ChanSlice[i]
-				newPixelData = append(newPixelData, part...)
+					part := <-ChanSlice[i]
 
-				flippedPart := <-flippedCellChanSlice[i]
-				flipped = append(flipped, flippedPart...)
+					newPixelData = append(newPixelData, part...)
+				}
 			}
+			turn++
+			world = newPixelData
 		}
-
-		fmt.Println(flipped)
-		/*for _, cell := range flipped{
-			c.events <- CellFlipped{
-				CompletedTurns: turn,
-				Cell: cell,
-			}
-		}*/
-		time.Sleep(10 * time.Second)
-		c.events <- TurnComplete{CompletedTurns: turn}
-		turn++
-		world = newPixelData
 	}
 	// HANBIN: sometimes, is just not too good to to something too early
 	c.ioCommand <- ioOutput
