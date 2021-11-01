@@ -25,11 +25,11 @@ func TestMain(m *testing.M) {
 	go func() {
 		result <- m.Run()
 	}()
-	/*res := m.Run()
+	res := m.Run()
 	go func() {
 		sdlEvents <- gol.FinalTurnComplete{}
 	}()
-	result <- res*/
+	result <- res
 	var w *sdl.Window = nil
 	fmt.Println(*noVis)
 	if !(*noVis) {

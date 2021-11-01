@@ -3,6 +3,7 @@ package gol
 import (
 	"github.com/ChrisGora/semaphore"
 	"strconv"
+	"sync"
 	"time"
 	"uk.ac.bris.cs/gameoflife/util"
 )
@@ -17,16 +18,19 @@ type distributorChannels struct {
 }
 
 var readMutex semaphore.Semaphore
+var realReadMutex sync.Mutex
 
 func timer(p Params, currentState *[][]uint8, turns *int, eventChan chan<- Event, isEventChannelClosed *bool) {
 	for {
 		time.Sleep(2 * time.Second)
 
 		if !*isEventChannelClosed {
-			readMutex.Wait()
+			/*readMutex.Wait()
+			realReadMutex.Lock()*/
 			number := len(calculateAliveCells(p, *currentState))
 			eventChan <- AliveCellsCount{CellsCount: number, CompletedTurns: *turns}
-			readMutex.Post()
+			/*realReadMutex.Unlock()
+			readMutex.Post()*/
 		} else {
 			return
 		}
@@ -188,15 +192,15 @@ func distributor(p Params, c distributorChannels) {
 
 		//fmt.Println(flipped)
 
-		/*for _, cell := range flipped {
+		for _, cell := range flipped {
 			c.events <- CellFlipped{
 				CompletedTurns: turn,
 				Cell:           cell,
 			}
-		}*/
+		}
 		//fmt.Println(turn)
 		//time.Sleep(10 * time.Second)
-		for h := 0; h < p.ImageHeight; h++ {
+		/*for h := 0; h < p.ImageHeight; h++ {
 			for w := 0; w < p.ImageWidth; w++ {
 				if world[h][w] != newPixelData[h][w] {
 					cell := util.Cell{X: w, Y: h}
@@ -206,12 +210,14 @@ func distributor(p Params, c distributorChannels) {
 					}
 				}
 			}
-		}
+		}*/
 		c.events <- TurnComplete{CompletedTurns: turn}
 		turn++
-		readMutex.Wait()
+		/*readMutex.Wait()
+		realReadMutex.Lock()*/
 		world = newPixelData
-		readMutex.Post()
+		/*realReadMutex.Unlock()
+		readMutex.Post()*/
 	}
 	// HANBIN: sometimes, is just not too good to to something too early
 	c.ioCommand <- ioOutput
