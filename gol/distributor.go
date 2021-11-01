@@ -132,7 +132,7 @@ func distributor(p Params, c distributorChannels) {
 
 	turn := 0
 
-	fmt.Println(calculateAliveCells(p, world))
+	//fmt.Println(calculateAliveCells(p, world))
 	for _, cell := range calculateAliveCells(p, world) {
 		c.events <- CellFlipped{
 			CompletedTurns: turn,
@@ -180,16 +180,27 @@ func distributor(p Params, c distributorChannels) {
 			}
 		}
 
-		fmt.Println(flipped)
+		//fmt.Println(flipped)
 
-		for _, cell := range flipped {
+		/*for _, cell := range flipped {
 			c.events <- CellFlipped{
 				CompletedTurns: turn,
 				Cell:           cell,
 			}
+		}*/
+		//fmt.Println(turn)
+		//time.Sleep(10 * time.Second)
+		for h := 0; h < p.ImageHeight; h++ {
+			for w := 0; w < p.ImageWidth; w++ {
+				if world[h][w] != newPixelData[h][w] {
+					cell := util.Cell{X: w, Y: h}
+					c.events <- CellFlipped{
+						CompletedTurns: turn,
+						Cell:           cell,
+					}
+				}
+			}
 		}
-		fmt.Println(turn)
-		time.Sleep(10 * time.Second)
 		c.events <- TurnComplete{CompletedTurns: turn}
 		turn++
 		world = newPixelData
