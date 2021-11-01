@@ -88,12 +88,12 @@ func calculateNextState(startY, endY, startX, endX int, data func(y, x int) uint
 					nextSLice[i-startY][j-startX] = 0
 					cell := util.Cell{X: j, Y: i}
 					flippedCell = append(flippedCell, cell)
-					c.events <- CellFlipped{Cell: cell, CompletedTurns: turn}
+					//c.events <- CellFlipped{Cell: cell, CompletedTurns: turn}
 				} else if numberLive > 3 {
 					nextSLice[i-startY][j-startX] = 0
 					cell := util.Cell{X: j, Y: i}
 					flippedCell = append(flippedCell, cell)
-					c.events <- CellFlipped{Cell: cell, CompletedTurns: turn}
+					//c.events <- CellFlipped{Cell: cell, CompletedTurns: turn}
 				} else {
 					nextSLice[i-startY][j-startX] = 255
 				}
@@ -102,7 +102,7 @@ func calculateNextState(startY, endY, startX, endX int, data func(y, x int) uint
 					nextSLice[i-startY][j-startX] = 255
 					cell := util.Cell{X: j, Y: i}
 					flippedCell = append(flippedCell, cell)
-					c.events <- CellFlipped{Cell: cell, CompletedTurns: turn}
+					//c.events <- CellFlipped{Cell: cell, CompletedTurns: turn}
 				} else {
 					nextSLice[i-startY][j-startX] = 0
 				}
@@ -132,6 +132,7 @@ func distributor(p Params, c distributorChannels) {
 
 	turn := 0
 
+	fmt.Println(calculateAliveCells(p, world))
 	for _, cell := range calculateAliveCells(p, world) {
 		c.events <- CellFlipped{
 			CompletedTurns: turn,
@@ -180,12 +181,14 @@ func distributor(p Params, c distributorChannels) {
 		}
 
 		fmt.Println(flipped)
-		/*for _, cell := range flipped{
+
+		for _, cell := range flipped {
 			c.events <- CellFlipped{
 				CompletedTurns: turn,
-				Cell: cell,
+				Cell:           cell,
 			}
-		}*/
+		}
+		fmt.Println(turn)
 		time.Sleep(10 * time.Second)
 		c.events <- TurnComplete{CompletedTurns: turn}
 		turn++
