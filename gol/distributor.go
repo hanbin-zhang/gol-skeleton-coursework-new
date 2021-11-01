@@ -1,8 +1,8 @@
 package gol
 
 import (
-	"fmt"
 	"strconv"
+	"sync"
 	"time"
 	"uk.ac.bris.cs/gameoflife/util"
 )
@@ -16,13 +16,17 @@ type distributorChannels struct {
 	ioInput    <-chan uint8
 }
 
+var readMutex sync.Mutex
+
 func timer(p Params, currentState *[][]uint8, turns *int, eventChan chan<- Event, isEventChannelClosed *bool) {
 	for {
 		time.Sleep(2 * time.Second)
-		number := len(calculateAliveCells(p, *currentState))
 
 		if !*isEventChannelClosed {
+			readMutex.Lock()
+			number := len(calculateAliveCells(p, *currentState))
 			eventChan <- AliveCellsCount{CellsCount: number, CompletedTurns: *turns}
+			readMutex.Unlock()
 		} else {
 			return
 		}
@@ -114,7 +118,7 @@ func calculateNextState(startY, endY, startX, endX int, data func(y, x int) uint
 
 // distributor divides the work between workers and interacts with other goroutines.
 func distributor(p Params, c distributorChannels) {
-	fmt.Println(p.Turns)
+
 	isEventChannelClosed := false
 	// let io start input
 	c.ioCommand <- ioInput
@@ -203,7 +207,9 @@ func distributor(p Params, c distributorChannels) {
 		}
 		c.events <- TurnComplete{CompletedTurns: turn}
 		turn++
+		readMutex.Lock()
 		world = newPixelData
+		readMutex.Unlock()
 	}
 	// HANBIN: sometimes, is just not too good to to something too early
 	c.ioCommand <- ioOutput
