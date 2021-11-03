@@ -7,6 +7,11 @@ import (
 	"uk.ac.bris.cs/gameoflife/util"
 )
 
+type workerChannels struct {
+	worldSlice  chan [][]uint8
+	flippedCell chan []util.Cell
+}
+
 type distributorChannels struct {
 	events     chan<- Event
 	ioCommand  chan<- ioCommand
@@ -69,7 +74,7 @@ func calculateAliveCells(p Params, world [][]byte) []util.Cell {
 	return list
 }
 
-func saveFile(c distributorChannels, p Params, world [][]uint8, turn int, isEventChannelClosed *bool) {
+func saveFile(c distributorChannels, p Params, world [][]uint8, turn int) {
 
 	//fmt.Println(p)
 	c.ioCommand <- ioOutput
@@ -93,13 +98,13 @@ func saveFile(c distributorChannels, p Params, world [][]uint8, turn int, isEven
 
 }
 
-func worker(startY, endY, startX, endX int, data func(y, x int) uint8, out chan<- [][]uint8, p Params, fcc chan []util.Cell, c distributorChannels, turn int) {
-	work, workFlipped := calculateNextState(startY, endY, startX, endX, data, p, c, turn)
-	out <- work
-	fcc <- workFlipped
+func worker(startY, endY, startX, endX int, data func(y, x int) uint8, out workerChannels, p Params) {
+	work, workFlipped := calculateSliceNextState(startY, endY, startX, endX, data, p)
+	out.worldSlice <- work
+	out.flippedCell <- workFlipped
 }
 
-func calculateNextState(startY, endY, startX, endX int, data func(y, x int) uint8, p Params, c distributorChannels, turn int) ([][]uint8, []util.Cell) {
+func calculateSliceNextState(startY, endY, startX, endX int, data func(y, x int) uint8, p Params) ([][]uint8, []util.Cell) {
 	height := endY - startY
 	width := endX - startX
 
@@ -154,11 +159,11 @@ func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int
 		key := <-c.keyPresses
 		switch key {
 		case 's':
-			saveFile(c, p, world, *turn, isEventChannelClosed)
+			saveFile(c, p, world, *turn)
 		case 'q':
 			{
 
-				saveFile(c, p, world, *turn, isEventChannelClosed)
+				saveFile(c, p, world, *turn)
 				c.events <- FinalTurnComplete{CompletedTurns: p.Turns, Alive: calculateAliveCells(p, world)}
 
 				// Make sure that the Io has finished any output before exiting.
@@ -183,7 +188,42 @@ func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int
 			renderingSemaphore.Post()
 		}
 	}
+}
 
+func calculateNextState(world [][]uint8, p Params) ([][]uint8, []util.Cell) {
+	data := makeImmutableMatrix(world)
+	// iterate through the cells
+	var newPixelData [][]uint8
+	var flipped []util.Cell
+	if p.Threads == 1 {
+		newPixelData, flipped = calculateSliceNextState(0, p.ImageHeight, 0, p.ImageWidth, data, p)
+	} else {
+		ChanSlice := make([]workerChannels, p.Threads)
+
+		for i := 0; i < p.Threads; i++ {
+			ChanSlice[i].worldSlice = make(chan [][]uint8)
+			ChanSlice[i].flippedCell = make(chan []util.Cell)
+		}
+		for i := 0; i < p.Threads-1; i++ {
+			go worker(int(float32(p.ImageHeight)*(float32(i)/float32(p.Threads))),
+				int(float32(p.ImageHeight)*(float32(i+1)/float32(p.Threads))),
+				0, p.ImageWidth, data, ChanSlice[i], p)
+		}
+		go worker(int(float32(p.ImageHeight)*(float32(p.Threads-1)/float32(p.Threads))),
+			p.ImageHeight,
+			0, p.ImageWidth, data, ChanSlice[p.Threads-1], p)
+
+		makeImmutableMatrix(newPixelData)
+		for i := 0; i < p.Threads; i++ {
+
+			part := <-ChanSlice[i].worldSlice
+			newPixelData = append(newPixelData, part...)
+
+			flippedPart := <-ChanSlice[i].flippedCell
+			flipped = append(flipped, flippedPart...)
+		}
+	}
+	return newPixelData, flipped
 }
 
 // distributor divides the work between workers and interacts with other goroutines.
@@ -227,37 +267,7 @@ func distributor(p Params, c distributorChannels) {
 	// iterate through the turns
 	for t := 1; t <= p.Turns; t++ {
 
-		data := makeImmutableMatrix(world)
-		// iterate through the cells
-		var newPixelData [][]uint8
-		var flipped []util.Cell
-		if p.Threads == 1 {
-			newPixelData, flipped = calculateNextState(0, p.ImageHeight, 0, p.ImageWidth, data, p, c, turn)
-		} else {
-			ChanSlice := make([]chan [][]uint8, p.Threads)
-			flippedCellChanSlice := make([]chan []util.Cell, p.Threads)
-			for i := 0; i < p.Threads; i++ {
-				ChanSlice[i] = make(chan [][]uint8)
-				flippedCellChanSlice[i] = make(chan []util.Cell)
-			}
-			for i := 0; i < p.Threads-1; i++ {
-				go worker(int(float32(p.ImageHeight)*(float32(i)/float32(p.Threads))),
-					int(float32(p.ImageHeight)*(float32(i+1)/float32(p.Threads))),
-					0, p.ImageWidth, data, ChanSlice[i], p, flippedCellChanSlice[i], c, turn)
-			}
-			go worker(int(float32(p.ImageHeight)*(float32(p.Threads-1)/float32(p.Threads))),
-				p.ImageHeight,
-				0, p.ImageWidth, data, ChanSlice[p.Threads-1], p, flippedCellChanSlice[p.Threads-1], c, turn)
-			makeImmutableMatrix(newPixelData)
-			for i := 0; i < p.Threads; i++ {
-
-				part := <-ChanSlice[i]
-				newPixelData = append(newPixelData, part...)
-
-				flippedPart := <-flippedCellChanSlice[i]
-				flipped = append(flipped, flippedPart...)
-			}
-		}
+		nextWorld, flipped := calculateNextState(world, p)
 
 		//fmt.Println(flipped)
 
@@ -292,7 +302,7 @@ func distributor(p Params, c distributorChannels) {
 		readMutexSemaphore.Wait()
 		//realReadMutex.Lock()
 		turn++
-		world = newPixelData
+		world = nextWorld
 		//realReadMutex.Unlock()
 		readMutexSemaphore.Post()
 
@@ -303,7 +313,7 @@ func distributor(p Params, c distributorChannels) {
 	//
 	//
 	//fmt.Println("aaa")
-	saveFile(c, p, world, turn, &isEventChannelClosed)
+	saveFile(c, p, world, turn)
 
 	// TODO: output proceeded map IO
 	// TODO: Report the final state using FinalTurnCompleteEvent.
