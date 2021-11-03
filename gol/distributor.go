@@ -1,7 +1,6 @@
 package gol
 
 import (
-	"fmt"
 	"github.com/ChrisGora/semaphore"
 	"strconv"
 	"time"
@@ -18,7 +17,8 @@ type distributorChannels struct {
 	keyPresses <-chan rune
 }
 
-var readMutex semaphore.Semaphore
+var readMutexSemaphore semaphore.Semaphore
+var renderingSemaphore semaphore.Semaphore
 
 //var realReadMutex sync.Mutex
 
@@ -27,11 +27,11 @@ func timer(p Params, currentState *[][]uint8, turns *int, eventChan chan<- Event
 		time.Sleep(2 * time.Second)
 
 		if !*isEventChannelClosed {
-			readMutex.Wait()
+			readMutexSemaphore.Wait()
 			//realReadMutex.Lock()
 			number := len(calculateAliveCells(p, *currentState))
 			//realReadMutex.Unlock()
-			readMutex.Post()
+			readMutexSemaphore.Post()
 			eventChan <- AliveCellsCount{CellsCount: number, CompletedTurns: *turns}
 
 		} else {
@@ -75,11 +75,11 @@ func saveFile(c distributorChannels, p Params, world [][]uint8, turn int, isEven
 	c.ioCommand <- ioOutput
 	outputFilename := strconv.Itoa(p.ImageHeight) + "x" + strconv.Itoa(p.ImageWidth) + "x" + strconv.Itoa(turn)
 	c.ioFilename <- outputFilename
-	readMutex.Wait()
+	readMutexSemaphore.Wait()
 	//realReadMutex.Lock()
 
 	//realReadMutex.Unlock()
-	readMutex.Post()
+	readMutexSemaphore.Post()
 	//fmt.Println(world)
 
 	if len(world) == 0 {
@@ -150,7 +150,7 @@ func calculateNextState(startY, endY, startX, endX int, data func(y, x int) uint
 func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int, isEventChannelClosed *bool) {
 
 	for {
-		fmt.Println("sas")
+		//fmt.Println("sas")
 		key := <-c.keyPresses
 		switch key {
 		case 's':
@@ -172,7 +172,15 @@ func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int
 				close(c.events)
 				//os.Exit(2)
 			}
-
+		case 'p':
+			renderingSemaphore.Wait()
+			for {
+				key := <-c.keyPresses
+				if key == 'p' {
+					break
+				}
+			}
+			renderingSemaphore.Post()
 		}
 	}
 
@@ -181,7 +189,8 @@ func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int
 // distributor divides the work between workers and interacts with other goroutines.
 func distributor(p Params, c distributorChannels) {
 
-	readMutex = semaphore.Init(1, 1)
+	readMutexSemaphore = semaphore.Init(1, 1)
+	renderingSemaphore = semaphore.Init(1, 1)
 
 	isEventChannelClosed := false
 	// let io start input
@@ -207,7 +216,7 @@ func distributor(p Params, c distributorChannels) {
 			Cell:           cell,
 		}
 	}
-	c.events <- TurnComplete{CompletedTurns: turn}
+	//c.events <- TurnComplete{CompletedTurns: turn}
 
 	// set the timer
 	go timer(p, &world, &turn, c.events, &isEventChannelClosed)
@@ -252,6 +261,7 @@ func distributor(p Params, c distributorChannels) {
 
 		//fmt.Println(flipped)
 
+		//a parallel way to calculate all cells flipped
 		for _, cell := range flipped {
 			c.events <- CellFlipped{
 				CompletedTurns: turn,
@@ -260,6 +270,9 @@ func distributor(p Params, c distributorChannels) {
 		}
 		//fmt.Println(turn)
 		//time.Sleep(10 * time.Second)
+
+		// this is a local way to calculate the cell flipped
+		// inefficient but friendly and easy and local
 		/*for h := 0; h < p.ImageHeight; h++ {
 			for w := 0; w < p.ImageWidth; w++ {
 				if world[h][w] != newPixelData[h][w] {
@@ -271,17 +284,20 @@ func distributor(p Params, c distributorChannels) {
 				}
 			}
 		}*/
-		c.events <- TurnComplete{CompletedTurns: turn}
 
-		readMutex.Wait()
+		renderingSemaphore.Wait()
+		c.events <- TurnComplete{CompletedTurns: turn}
+		renderingSemaphore.Post()
+
+		readMutexSemaphore.Wait()
 		//realReadMutex.Lock()
 		turn++
 		world = newPixelData
 		//realReadMutex.Unlock()
-		readMutex.Post()
+		readMutexSemaphore.Post()
+
 	}
-	//fmt.Println("trueorflase")
-	isEventChannelClosed = true
+
 	// HANBIN: sometimes, is just not too good to to something too early
 	//
 	//
@@ -301,7 +317,7 @@ func distributor(p Params, c distributorChannels) {
 	c.events <- StateChange{turn, Quitting}
 
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
-
+	isEventChannelClosed = true
 	close(c.events)
 	//os.Exit(2)
 }
