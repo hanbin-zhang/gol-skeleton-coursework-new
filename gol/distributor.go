@@ -1,9 +1,9 @@
 package gol
 
 import (
+	"fmt"
 	"github.com/ChrisGora/semaphore"
 	"strconv"
-	"sync"
 	"time"
 	"uk.ac.bris.cs/gameoflife/util"
 )
@@ -15,10 +15,12 @@ type distributorChannels struct {
 	ioFilename chan<- string
 	ioOutput   chan<- uint8
 	ioInput    <-chan uint8
+	keyPresses <-chan rune
 }
 
 var readMutex semaphore.Semaphore
-var realReadMutex sync.Mutex
+
+//var realReadMutex sync.Mutex
 
 func timer(p Params, currentState *[][]uint8, turns *int, eventChan chan<- Event, isEventChannelClosed *bool) {
 	for {
@@ -26,11 +28,12 @@ func timer(p Params, currentState *[][]uint8, turns *int, eventChan chan<- Event
 
 		if !*isEventChannelClosed {
 			readMutex.Wait()
-			realReadMutex.Lock()
+			//realReadMutex.Lock()
 			number := len(calculateAliveCells(p, *currentState))
-			eventChan <- AliveCellsCount{CellsCount: number, CompletedTurns: *turns}
-			realReadMutex.Unlock()
+			//realReadMutex.Unlock()
 			readMutex.Post()
+			eventChan <- AliveCellsCount{CellsCount: number, CompletedTurns: *turns}
+
 		} else {
 			return
 		}
@@ -64,6 +67,30 @@ func calculateAliveCells(p Params, world [][]byte) []util.Cell {
 		}
 	}
 	return list
+}
+
+func saveFile(c distributorChannels, p Params, world [][]uint8, turn int, isEventChannelClosed *bool) {
+
+	//fmt.Println(p)
+	c.ioCommand <- ioOutput
+	outputFilename := strconv.Itoa(p.ImageHeight) + "x" + strconv.Itoa(p.ImageWidth) + "x" + strconv.Itoa(turn)
+	c.ioFilename <- outputFilename
+	readMutex.Wait()
+	//realReadMutex.Lock()
+
+	//realReadMutex.Unlock()
+	readMutex.Post()
+	//fmt.Println(world)
+
+	if len(world) == 0 {
+		return
+	}
+	for y := 0; y < p.ImageHeight; y++ {
+		for x := 0; x < p.ImageWidth; x++ {
+			c.ioOutput <- world[y][x]
+		}
+	}
+
 }
 
 func worker(startY, endY, startX, endX int, data func(y, x int) uint8, out chan<- [][]uint8, p Params, fcc chan []util.Cell, c distributorChannels, turn int) {
@@ -120,6 +147,37 @@ func calculateNextState(startY, endY, startX, endX int, data func(y, x int) uint
 	return nextSLice, flippedCell
 }
 
+func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int, isEventChannelClosed *bool) {
+
+	for {
+		fmt.Println("sas")
+		key := <-c.keyPresses
+		switch key {
+		case 's':
+			saveFile(c, p, world, *turn, isEventChannelClosed)
+		case 'q':
+			{
+
+				saveFile(c, p, world, *turn, isEventChannelClosed)
+				c.events <- FinalTurnComplete{CompletedTurns: p.Turns, Alive: calculateAliveCells(p, world)}
+
+				// Make sure that the Io has finished any output before exiting.
+				c.ioCommand <- ioCheckIdle
+				<-c.ioIdle
+
+				c.events <- StateChange{*turn, Quitting}
+
+				// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
+				*isEventChannelClosed = true
+				close(c.events)
+				//os.Exit(2)
+			}
+
+		}
+	}
+
+}
+
 // distributor divides the work between workers and interacts with other goroutines.
 func distributor(p Params, c distributorChannels) {
 
@@ -153,6 +211,8 @@ func distributor(p Params, c distributorChannels) {
 
 	// set the timer
 	go timer(p, &world, &turn, c.events, &isEventChannelClosed)
+
+	go checkKeyPresses(p, c, world, &turn, &isEventChannelClosed)
 
 	// TODO: Execute all turns of the Game of Life.
 	// iterate through the turns
@@ -212,22 +272,22 @@ func distributor(p Params, c distributorChannels) {
 			}
 		}*/
 		c.events <- TurnComplete{CompletedTurns: turn}
-		turn++
+
 		readMutex.Wait()
-		realReadMutex.Lock()
+		//realReadMutex.Lock()
+		turn++
 		world = newPixelData
-		realReadMutex.Unlock()
+		//realReadMutex.Unlock()
 		readMutex.Post()
 	}
+	//fmt.Println("trueorflase")
+	isEventChannelClosed = true
 	// HANBIN: sometimes, is just not too good to to something too early
-	c.ioCommand <- ioOutput
-	outputFilename := strconv.Itoa(p.ImageHeight) + "x" + strconv.Itoa(p.ImageWidth) + "x" + strconv.Itoa(turn)
-	c.ioFilename <- outputFilename
-	for y := 0; y < p.ImageHeight; y++ {
-		for x := 0; x < p.ImageWidth; x++ {
-			c.ioOutput <- world[y][x]
-		}
-	}
+	//
+	//
+	//
+	//fmt.Println("aaa")
+	saveFile(c, p, world, turn, &isEventChannelClosed)
 
 	// TODO: output proceeded map IO
 	// TODO: Report the final state using FinalTurnCompleteEvent.
@@ -241,7 +301,7 @@ func distributor(p Params, c distributorChannels) {
 	c.events <- StateChange{turn, Quitting}
 
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
-	isEventChannelClosed = true
-	close(c.events)
 
+	close(c.events)
+	//os.Exit(2)
 }
