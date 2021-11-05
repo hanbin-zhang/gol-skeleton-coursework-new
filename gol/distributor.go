@@ -45,14 +45,14 @@ func timer(p Params, currentState *[][]uint8, turns *int, eventChan chan<- Event
 	}
 }
 
-func makeImmutableMatrix(matrix [][]uint8) func(y, x int) uint8 {
+func MakeImmutableMatrix(matrix [][]uint8) func(y, x int) uint8 {
 	return func(y, x int) uint8 {
 		return matrix[y][x]
 	}
 }
 
 // a function that create an empty world
-func makeNewWorld(height, width int) [][]uint8 {
+func MakeNewWorld(height, width int) [][]uint8 {
 	newWorld := make([][]uint8, height)
 	for i := range newWorld {
 		newWorld[i] = make([]uint8, width)
@@ -108,7 +108,7 @@ func calculateSliceNextState(startY, endY, startX, endX int, data func(y, x int)
 	height := endY - startY
 	width := endX - startX
 
-	nextSLice := makeNewWorld(height, width)
+	nextSLice := MakeNewWorld(height, width)
 	var flippedCell []util.Cell
 	for i := startY; i < endY; i++ {
 		for j := startX; j < endX; j++ {
@@ -193,7 +193,7 @@ func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int
 }
 
 func calculateNextState(world [][]uint8, p Params) ([][]uint8, []util.Cell) {
-	data := makeImmutableMatrix(world)
+	data := MakeImmutableMatrix(world)
 	// iterate through the cells
 	var newPixelData [][]uint8
 	var flipped []util.Cell
@@ -215,7 +215,7 @@ func calculateNextState(world [][]uint8, p Params) ([][]uint8, []util.Cell) {
 			p.ImageHeight,
 			0, p.ImageWidth, data, ChanSlice[p.Threads-1], p)
 
-		makeImmutableMatrix(newPixelData)
+		MakeImmutableMatrix(newPixelData)
 		for i := 0; i < p.Threads; i++ {
 
 			part := <-ChanSlice[i].worldSlice
@@ -242,7 +242,7 @@ func distributor(p Params, c distributorChannels) {
 	c.ioFilename <- filename
 
 	// TODO: Create a 2D slice to store the world.
-	world := makeNewWorld(p.ImageHeight, p.ImageWidth)
+	world := MakeNewWorld(p.ImageHeight, p.ImageWidth)
 	for h := 0; h < p.ImageHeight; h++ {
 		for w := 0; w < p.ImageWidth; w++ {
 			world[h][w] = <-c.ioInput
