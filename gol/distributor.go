@@ -1,9 +1,13 @@
 package gol
 
 import (
+	"fmt"
 	"github.com/ChrisGora/semaphore"
+	"net/rpc"
+	"os"
 	"strconv"
 	"time"
+	"uk.ac.bris.cs/gameoflife/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
 )
 
@@ -52,6 +56,7 @@ func MakeImmutableMatrix(matrix [][]uint8) func(y, x int) uint8 {
 }
 
 // a function that create an empty world
+
 func MakeNewWorld(height, width int) [][]uint8 {
 	newWorld := make([][]uint8, height)
 	for i := range newWorld {
@@ -269,8 +274,22 @@ func distributor(p Params, c distributorChannels) {
 	// iterate through the turns
 	for t := 1; t <= p.Turns; t++ {
 
-		nextWorld, flipped := calculateNextState(world, p)
+		request := stubs.Request{Threads: p.Threads,
+			ImageWidth:  p.ImageWidth,
+			ImageHeight: p.ImageHeight,
+			World:       world}
 
+		response := new(stubs.Response)
+
+		client, _ := rpc.Dial("tcp", "127.0.0.1:8030")
+		err := client.Call(stubs.GolHandler, request, &response)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(9)
+		}
+
+		nextWorld := response.NewWorld
+		flipped := response.FlippedCell
 		//fmt.Println(flipped)
 
 		//a parallel way to calculate all cells flipped

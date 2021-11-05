@@ -43,8 +43,11 @@ func main() {
 		false,
 		"Disables the SDL window, so there is no visualisation during the tests.")
 
+	pAddr := flag.String("ip", "127.0.0.1:8030", "IP to dial")
+
 	flag.Parse()
 
+	params.ServerAddr = *pAddr
 	fmt.Println("Threads:", params.Threads)
 	fmt.Println("Width:", params.ImageWidth)
 	fmt.Println("Height:", params.ImageHeight)

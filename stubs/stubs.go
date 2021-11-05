@@ -1,7 +1,6 @@
 package stubs
 
 import (
-	"uk.ac.bris.cs/gameoflife/gol"
 	"uk.ac.bris.cs/gameoflife/util"
 )
 
@@ -9,9 +8,12 @@ var GolHandler = "GolOperations.CalculateCellFlipped"
 
 type Response struct {
 	FlippedCell []util.Cell
+	NewWorld    [][]uint8
 }
 
 type Request struct {
-	P     gol.Params
-	World [][]uint8
+	Threads     int
+	ImageWidth  int
+	ImageHeight int
+	World       [][]uint8
 }
