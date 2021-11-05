@@ -179,6 +179,7 @@ func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int
 			}
 		case 'p':
 			renderingSemaphore.Wait()
+			c.events <- StateChange{*turn, Paused}
 			for {
 				key := <-c.keyPresses
 				if key == 'p' {
@@ -186,6 +187,7 @@ func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int
 				}
 			}
 			renderingSemaphore.Post()
+			c.events <- StateChange{*turn, Executing}
 		}
 	}
 }
