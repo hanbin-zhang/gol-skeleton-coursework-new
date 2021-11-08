@@ -29,14 +29,14 @@ var renderingSemaphore semaphore.Semaphore
 
 //var realReadMutex sync.Mutex
 
-func rpcWorker(ip string, p Params, world [][]uint8, serverID, serverNumber int, c chan stubs.Response) {
+func rpcWorker(ip string, p Params, world [][]uint8, serverID, serverNumber int, c chan stubs.Response, isLast bool) {
 
 	startY := 0
 	endY := 0
 
 	if serverID != serverNumber-1 {
 		startY = p.ImageHeight / serverNumber * serverID
-		endY = p.ImageHeight / serverNumber * serverID
+		endY = p.ImageHeight / serverNumber * (serverID + 1)
 	} else {
 		startY = p.ImageHeight / serverNumber * serverID
 		endY = p.ImageHeight
@@ -52,12 +52,14 @@ func rpcWorker(ip string, p Params, world [][]uint8, serverID, serverNumber int,
 		World:       world}
 
 	response := new(stubs.Response)
-
+	//fmt.Println(ip)
 	client, _ := rpc.Dial("tcp", ip)
+	defer client.Close()
 
 	client.Call(stubs.GolHandler, request, &response)
 
 	c <- *response
+	return
 
 }
 
@@ -312,19 +314,21 @@ func distributor(p Params, c distributorChannels) {
 		}
 
 		for n := 0; n < len(IPs)-1; n++ {
-			go rpcWorker(IPs[n], p, world, n, len(IPs), chanSlice[n])
+			go rpcWorker(IPs[n], p, world, n, len(IPs), chanSlice[n], false)
 		}
 
-		go rpcWorker(IPs[len(IPs)-1], p, world, len(IPs)-1, len(IPs), chanSlice[len(IPs)-1])
+		go rpcWorker(IPs[len(IPs)-1], p, world, len(IPs)-1, len(IPs), chanSlice[len(IPs)-1], true)
 
 		var nextWorld [][]uint8
 		var flipped []util.Cell
 
 		for n := 0; n < len(IPs); n++ {
 			response := <-chanSlice[n]
+
 			nextWorld = append(nextWorld, response.NewWorld...)
 			flipped = append(flipped, response.FlippedCell...)
 		}
+
 		//fmt.Println(flipped)
 
 		//a parallel way to calculate all cells flipped
