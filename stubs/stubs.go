@@ -15,5 +15,9 @@ type Request struct {
 	Threads     int
 	ImageWidth  int
 	ImageHeight int
+	StartY      int
+	EndY        int
+	StartX      int
+	EndX        int
 	World       [][]uint8
 }

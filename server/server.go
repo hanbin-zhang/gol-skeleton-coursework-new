@@ -20,11 +20,14 @@ func (g *GolOperations) CalculateCellFlipped(req stubs.Request, res *stubs.Respo
 
 	// iterate through the cells
 
+	height := req.EndY - req.StartY
+	width := req.EndX - req.StartX
+
 	data := gol.MakeImmutableMatrix(world)
-	nextSLice := gol.MakeNewWorld(req.ImageHeight, req.ImageWidth)
+	nextSLice := gol.MakeNewWorld(height, width)
 	var flippedCell []util.Cell
-	for i := 0; i < req.ImageHeight; i++ {
-		for j := 0; j < req.ImageWidth; j++ {
+	for i := req.StartY; i < req.EndY; i++ {
+		for j := req.StartX; j < req.EndX; j++ {
 			numberLive := 0
 			for _, l := range [3]int{j - 1, j, j + 1} {
 				for _, k := range [3]int{i - 1, i, i + 1} {
@@ -38,26 +41,26 @@ func (g *GolOperations) CalculateCellFlipped(req stubs.Request, res *stubs.Respo
 			if data(i, j) == 255 {
 				numberLive -= 1
 				if numberLive < 2 {
-					nextSLice[i][j] = 0
+					nextSLice[i-req.StartY][j-req.StartX] = 0
 					cell := util.Cell{X: j, Y: i}
 					flippedCell = append(flippedCell, cell)
 					//c.events <- CellFlipped{Cell: cell, CompletedTurns: turn}
 				} else if numberLive > 3 {
-					nextSLice[i][j] = 0
+					nextSLice[i-req.StartY][j-req.StartX] = 0
 					cell := util.Cell{X: j, Y: i}
 					flippedCell = append(flippedCell, cell)
 					//c.events <- CellFlipped{Cell: cell, CompletedTurns: turn}
 				} else {
-					nextSLice[i][j] = 255
+					nextSLice[i-req.StartY][j-req.StartX] = 255
 				}
 			} else {
 				if numberLive == 3 {
-					nextSLice[i][j] = 255
+					nextSLice[i-req.StartY][j-req.StartX] = 255
 					cell := util.Cell{X: j, Y: i}
 					flippedCell = append(flippedCell, cell)
 					//c.events <- CellFlipped{Cell: cell, CompletedTurns: turn}
 				} else {
-					nextSLice[i][j] = 0
+					nextSLice[i-req.StartY][j-req.StartX] = 0
 				}
 			}
 		}

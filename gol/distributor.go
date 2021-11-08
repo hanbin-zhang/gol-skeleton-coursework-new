@@ -1,10 +1,8 @@
 package gol
 
 import (
-	"fmt"
 	"github.com/ChrisGora/semaphore"
 	"net/rpc"
-	"os"
 	"strconv"
 	"time"
 	"uk.ac.bris.cs/gameoflife/stubs"
@@ -30,6 +28,38 @@ var readMutexSemaphore semaphore.Semaphore
 var renderingSemaphore semaphore.Semaphore
 
 //var realReadMutex sync.Mutex
+
+func rpcWorker(ip string, p Params, world [][]uint8, serverID, serverNumber int, c chan stubs.Response) {
+
+	startY := 0
+	endY := 0
+
+	if serverID != serverNumber-1 {
+		startY = p.ImageHeight / serverNumber * serverID
+		endY = p.ImageHeight / serverNumber * serverID
+	} else {
+		startY = p.ImageHeight / serverNumber * serverID
+		endY = p.ImageHeight
+	}
+
+	request := stubs.Request{Threads: p.Threads,
+		ImageWidth:  p.ImageWidth,
+		ImageHeight: p.ImageHeight,
+		StartX:      0,
+		EndX:        p.ImageWidth,
+		StartY:      startY,
+		EndY:        endY,
+		World:       world}
+
+	response := new(stubs.Response)
+
+	client, _ := rpc.Dial("tcp", ip)
+
+	client.Call(stubs.GolHandler, request, &response)
+
+	c <- *response
+
+}
 
 func timer(p Params, currentState *[][]uint8, turns *int, eventChan chan<- Event, isEventChannelClosed *bool) {
 	for {
@@ -271,25 +301,30 @@ func distributor(p Params, c distributorChannels) {
 	go checkKeyPresses(p, c, world, &turn, &isEventChannelClosed)
 
 	// TODO: Execute all turns of the Game of Life.
+
+	IPs := []string{"127.0.0.1:8030", "127.0.0.1:8040", "127.0.0.1:8050"}
 	// iterate through the turns
 	for t := 1; t <= p.Turns; t++ {
+		chanSlice := make([]chan stubs.Response, len(IPs))
 
-		request := stubs.Request{Threads: p.Threads,
-			ImageWidth:  p.ImageWidth,
-			ImageHeight: p.ImageHeight,
-			World:       world}
-
-		response := new(stubs.Response)
-
-		client, _ := rpc.Dial("tcp", "127.0.0.1:8030")
-		err := client.Call(stubs.GolHandler, request, &response)
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(9)
+		for n := 0; n < len(IPs); n++ {
+			chanSlice[n] = make(chan stubs.Response)
 		}
 
-		nextWorld := response.NewWorld
-		flipped := response.FlippedCell
+		for n := 0; n < len(IPs)-1; n++ {
+			go rpcWorker(IPs[n], p, world, n, len(IPs), chanSlice[n])
+		}
+
+		go rpcWorker(IPs[len(IPs)-1], p, world, len(IPs)-1, len(IPs), chanSlice[len(IPs)-1])
+
+		var nextWorld [][]uint8
+		var flipped []util.Cell
+
+		for n := 0; n < len(IPs); n++ {
+			response := <-chanSlice[n]
+			nextWorld = append(nextWorld, response.NewWorld...)
+			flipped = append(flipped, response.FlippedCell...)
+		}
 		//fmt.Println(flipped)
 
 		//a parallel way to calculate all cells flipped
