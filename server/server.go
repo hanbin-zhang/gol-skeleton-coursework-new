@@ -19,6 +19,12 @@ type workerChannels struct {
 	flippedCell chan []util.Cell
 }
 
+func MakeImmutableMatrix(matrix [][]uint8) func(y, x int) uint8 {
+	return func(y, x int) uint8 {
+		return matrix[y][x]
+	}
+}
+
 func worker(startY, endY, startX, endX, ImageHeight, ImageWidth int, data func(y, x int) uint8, out workerChannels) {
 	work, workFlipped := calculateSliceNextState(startY, endY, startX, endX, ImageHeight, ImageWidth, data)
 	out.worldSlice <- work
@@ -73,32 +79,35 @@ func calculateSliceNextState(startY, endY, startX, endX, ImageHeight, ImageWidth
 	return nextSLice, flippedCell
 }
 
-func calculateNextState(req stubs.Request, world [][]uint8) ([][]uint8, []util.Cell) {
-	data := gol.MakeImmutableMatrix(world)
+func calculateNextState(req stubs.Request) ([][]uint8, []util.Cell) {
+	threads := req.Threads
+	world := req.World
+	data := MakeImmutableMatrix(world)
 	// iterate through the cells
 	var newPixelData [][]uint8
 	var flipped []util.Cell
-	if p.Threads == 1 {
-		newPixelData, flipped = calculateSliceNextState(0, ImageHeight, 0, p.ImageWidth, data, p)
+	ImageHeight := req.EndY - req.StartY
+	ImageWidth := req.EndX - req.StartX
+	if threads == 1 {
+		newPixelData, flipped = calculateSliceNextState(req.StartY, req.EndY, req.StartX, req.EndX, req.ImageHeight, req.ImageWidth, data)
 	} else {
-		ChanSlice := make([]workerChannels, p.Threads)
+		ChanSlice := make([]workerChannels, threads)
 
-		for i := 0; i < p.Threads; i++ {
+		for i := 0; i < threads; i++ {
 			ChanSlice[i].worldSlice = make(chan [][]uint8)
 			ChanSlice[i].flippedCell = make(chan []util.Cell)
 		}
-		for i := 0; i < p.Threads-1; i++ {
-			go worker(int(float32(p.ImageHeight)*(float32(i)/float32(p.Threads))),
-				int(float32(p.ImageHeight)*(float32(i+1)/float32(p.Threads))),
-				0, p.ImageWidth, data, ChanSlice[i], p)
+		for i := 0; i < threads-1; i++ {
+			go worker(int(float32(ImageHeight)*(float32(i)/float32(threads)))+req.StartY,
+				int(float32(ImageHeight)*(float32(i+1)/float32(threads)))+req.StartY,
+				0, ImageWidth, req.ImageHeight, req.ImageWidth, data, ChanSlice[i])
 		}
-		go worker(int(float32(p.ImageHeight)*(float32(p.Threads-1)/float32(p.Threads))),
-			p.ImageHeight,
-			0, p.ImageWidth, data, ChanSlice[p.Threads-1], p)
+		go worker(int(float32(ImageHeight)*(float32(threads-1)/float32(threads)))+req.StartY,
+			ImageHeight+req.StartY,
+			0, ImageWidth, req.ImageHeight, req.ImageWidth, data, ChanSlice[threads-1])
 
-		MakeImmutableMatrix(newPixelData)
-		for i := 0; i < p.Threads; i++ {
-
+		//MakeImmutableMatrix(newPixelData)
+		for i := 0; i < threads; i++ {
 			part := <-ChanSlice[i].worldSlice
 			newPixelData = append(newPixelData, part...)
 
@@ -111,56 +120,10 @@ func calculateNextState(req stubs.Request, world [][]uint8) ([][]uint8, []util.C
 
 func (g *GolOperations) CalculateCellFlipped(req stubs.Request, res *stubs.Response) (err error) {
 
-	world := req.World
-
 	// iterate through the cells
+	nextWorld, flippedCell := calculateNextState(req)
 
-	height := req.EndY - req.StartY
-	width := req.EndX - req.StartX
-
-	data := gol.MakeImmutableMatrix(world)
-	nextSLice := gol.MakeNewWorld(height, width)
-	var flippedCell []util.Cell
-	for i := req.StartY; i < req.EndY; i++ {
-		for j := req.StartX; j < req.EndX; j++ {
-			numberLive := 0
-			for _, l := range [3]int{j - 1, j, j + 1} {
-				for _, k := range [3]int{i - 1, i, i + 1} {
-					newK := (k + req.ImageHeight) % req.ImageHeight
-					newL := (l + req.ImageWidth) % req.ImageWidth
-					if data(newK, newL) == 255 {
-						numberLive++
-					}
-				}
-			}
-			if data(i, j) == 255 {
-				numberLive -= 1
-				if numberLive < 2 {
-					nextSLice[i-req.StartY][j-req.StartX] = 0
-					cell := util.Cell{X: j, Y: i}
-					flippedCell = append(flippedCell, cell)
-					//c.events <- CellFlipped{Cell: cell, CompletedTurns: turn}
-				} else if numberLive > 3 {
-					nextSLice[i-req.StartY][j-req.StartX] = 0
-					cell := util.Cell{X: j, Y: i}
-					flippedCell = append(flippedCell, cell)
-					//c.events <- CellFlipped{Cell: cell, CompletedTurns: turn}
-				} else {
-					nextSLice[i-req.StartY][j-req.StartX] = 255
-				}
-			} else {
-				if numberLive == 3 {
-					nextSLice[i-req.StartY][j-req.StartX] = 255
-					cell := util.Cell{X: j, Y: i}
-					flippedCell = append(flippedCell, cell)
-					//c.events <- CellFlipped{Cell: cell, CompletedTurns: turn}
-				} else {
-					nextSLice[i-req.StartY][j-req.StartX] = 0
-				}
-			}
-		}
-	}
-	res.NewWorld = nextSLice
+	res.NewWorld = nextWorld
 	res.FlippedCell = flippedCell
 	return
 }
