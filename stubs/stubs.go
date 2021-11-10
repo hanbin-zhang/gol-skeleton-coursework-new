@@ -11,11 +11,12 @@ var BrokerCalculate = "Broker.CalculateNextState"
 type Response struct {
 	FlippedCell []util.Cell
 	NewWorld    [][]uint8
-	sliceNumber int
+	SliceNumber int
 }
 
 type Request struct {
-	sliceNumber int
+	Threads     int
+	SliceNumber int
 	ImageWidth  int
 	ImageHeight int
 	StartY      int

@@ -3,10 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
-	"math/rand"
 	"net"
 	"net/rpc"
-	"time"
 	"uk.ac.bris.cs/gameoflife/gol"
 	"uk.ac.bris.cs/gameoflife/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
@@ -129,15 +127,23 @@ func (g *GolOperations) CalculateCellFlipped(req stubs.Request, res *stubs.Respo
 }
 
 func main() {
-	pAddr := flag.String("port", "8030", "Port to listen on")
+	pAddr := flag.String("port", "127.0.0.1:8040", "Port to listen on")
+	bAddr := flag.String("broker", "127.0.0.1:8030", "IP of broker")
 	flag.Parse()
-	rand.Seed(time.Now().UnixNano())
+
 	err := rpc.Register(&GolOperations{})
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	listener, _ := net.Listen("tcp", ":"+*pAddr)
+
+	client, _ := rpc.Dial("tcp", *bAddr)
+	defer client.Close()
+	subscribe := stubs.Subscription{NodeAddress: *pAddr, Callback: stubs.GolHandler}
+	res := new(stubs.StatusReport)
+	_ = client.Go(stubs.Subscribe, subscribe, res, nil)
+
+	listener, _ := net.Listen("tcp", *pAddr)
 	defer func(listener net.Listener) {
 		err := listener.Close()
 		if err != nil {
