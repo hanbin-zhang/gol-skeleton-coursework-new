@@ -29,26 +29,40 @@ var renderingSemaphore semaphore.Semaphore
 
 //var realReadMutex sync.Mutex
 
-func rpcWorker(ip string, p Params, world [][]uint8, serverID, serverNumber int, c chan stubs.Response, isLast bool) {
-
-	startY := 0
-	endY := 0
-
-	if serverID != serverNumber-1 {
-		startY = p.ImageHeight / serverNumber * serverID
-		endY = p.ImageHeight / serverNumber * (serverID + 1)
-	} else {
-		startY = p.ImageHeight / serverNumber * serverID
-		endY = p.ImageHeight
+func Append2DSliceByColumn(twoDSlice [][][]uint8) [][]uint8 {
+	newWorld := twoDSlice[0]
+	for i := 1; i < len(twoDSlice); i++ {
+		part := twoDSlice[i]
+		for j := 0; j < len(newWorld); j++ {
+			newWorld[j] = append(newWorld[j], part[j]...)
+		}
 	}
 
-	request := stubs.Request{Threads: p.Threads,
+	return newWorld
+}
+
+func rpcWorker(ip string, p Params, world [][]uint8, serverID, serverNumber int, c chan stubs.Response, isLast bool) {
+
+	startX := 0
+	endX := 0
+	threads := p.Threads
+
+	if serverID != serverNumber-1 {
+		startX = p.ImageWidth / serverNumber * serverID
+		endX = p.ImageWidth / serverNumber * (serverID + 1)
+
+	} else {
+		startX = p.ImageWidth / serverNumber * serverID
+		endX = p.ImageWidth
+	}
+
+	request := stubs.Request{Threads: threads,
 		ImageWidth:  p.ImageWidth,
 		ImageHeight: p.ImageHeight,
-		StartX:      0,
-		EndX:        p.ImageWidth,
-		StartY:      startY,
-		EndY:        endY,
+		StartX:      startX,
+		EndX:        endX,
+		StartY:      0,
+		EndY:        p.ImageHeight,
 		World:       world}
 
 	response := new(stubs.Response)
@@ -59,7 +73,6 @@ func rpcWorker(ip string, p Params, world [][]uint8, serverID, serverNumber int,
 	client.Call(stubs.GolHandler, request, &response)
 
 	c <- *response
-	return
 
 }
 
@@ -321,14 +334,16 @@ func distributor(p Params, c distributorChannels) {
 
 		var nextWorld [][]uint8
 		var flipped []util.Cell
+		SliceOf2DSlice := make([][][]uint8, len(chanSlice))
 
 		for n := 0; n < len(IPs); n++ {
 			response := <-chanSlice[n]
 
-			nextWorld = append(nextWorld, response.NewWorld...)
+			SliceOf2DSlice[n] = response.NewWorld
 			flipped = append(flipped, response.FlippedCell...)
 		}
 
+		nextWorld = Append2DSliceByColumn(SliceOf2DSlice)
 		//fmt.Println(flipped)
 
 		//a parallel way to calculate all cells flipped

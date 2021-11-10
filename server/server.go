@@ -86,12 +86,12 @@ func calculateNextState(req stubs.Request) ([][]uint8, []util.Cell) {
 	// iterate through the cells
 	var newPixelData [][]uint8
 	var flipped []util.Cell
-	ImageHeight := req.EndY - req.StartY
-	ImageWidth := req.EndX - req.StartX
+
 	if threads == 1 {
 		newPixelData, flipped = calculateSliceNextState(req.StartY, req.EndY, req.StartX, req.EndX, req.ImageHeight, req.ImageWidth, data)
 	} else {
 		ChanSlice := make([]workerChannels, threads)
+		ImageHeight := req.EndY - req.StartY
 
 		for i := 0; i < threads; i++ {
 			ChanSlice[i].worldSlice = make(chan [][]uint8)
@@ -100,11 +100,11 @@ func calculateNextState(req stubs.Request) ([][]uint8, []util.Cell) {
 		for i := 0; i < threads-1; i++ {
 			go worker(int(float32(ImageHeight)*(float32(i)/float32(threads)))+req.StartY,
 				int(float32(ImageHeight)*(float32(i+1)/float32(threads)))+req.StartY,
-				0, ImageWidth, req.ImageHeight, req.ImageWidth, data, ChanSlice[i])
+				req.StartX, req.EndX, req.ImageHeight, req.ImageWidth, data, ChanSlice[i])
 		}
 		go worker(int(float32(ImageHeight)*(float32(threads-1)/float32(threads)))+req.StartY,
 			ImageHeight+req.StartY,
-			0, ImageWidth, req.ImageHeight, req.ImageWidth, data, ChanSlice[threads-1])
+			req.StartX, req.EndX, req.ImageHeight, req.ImageWidth, data, ChanSlice[threads-1])
 
 		//MakeImmutableMatrix(newPixelData)
 		for i := 0; i < threads; i++ {
