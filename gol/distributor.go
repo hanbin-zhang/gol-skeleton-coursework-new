@@ -78,7 +78,7 @@ func saveFile(c distributorChannels, p Params, world [][]uint8, turn int) {
 
 	//fmt.Println(p)
 	c.ioCommand <- ioOutput
-	outputFilename := strconv.Itoa(p.ImageHeight) + "x" + strconv.Itoa(p.ImageWidth) + "x" + strconv.Itoa(turn)
+	outputFilename := strconv.Itoa(p.ImageWidth) + "x" + strconv.Itoa(p.ImageHeight) + "x" + strconv.Itoa(turn)
 	c.ioFilename <- outputFilename
 	readMutexSemaphore.Wait()
 	//realReadMutex.Lock()
@@ -238,7 +238,8 @@ func distributor(p Params, c distributorChannels) {
 	// let io start input
 	c.ioCommand <- ioInput
 	// HANBIN: send to the io goroutine the file name specified by the width and height
-	filename := strconv.Itoa(p.ImageHeight) + "x" + strconv.Itoa(p.ImageWidth)
+	// TODO: IS the file name in format heightxwidth or widthxheight
+	filename := strconv.Itoa(p.ImageWidth) + "x" + strconv.Itoa(p.ImageHeight)
 	c.ioFilename <- filename
 
 	// TODO: Create a 2D slice to store the world.
