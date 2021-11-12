@@ -192,7 +192,7 @@ func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int
 	}
 }
 
-func calculateNextState(world [][]uint8, p Params) ([][]uint8, []util.Cell) {
+func CalculateNextState(world [][]uint8, p Params) ([][]uint8, []util.Cell) {
 	data := makeImmutableMatrix(world)
 	// iterate through the cells
 	var newPixelData [][]uint8
@@ -270,7 +270,7 @@ func distributor(p Params, c distributorChannels) {
 	// iterate through the turns
 	for t := 1; t <= p.Turns; t++ {
 
-		nextWorld, flipped := calculateNextState(world, p)
+		nextWorld, flipped := CalculateNextState(world, p)
 
 		//fmt.Println(flipped)
 
