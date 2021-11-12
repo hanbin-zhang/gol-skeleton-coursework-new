@@ -1,8 +1,10 @@
 package gol
 
 import (
+	"fmt"
 	"github.com/ChrisGora/semaphore"
 	"net/rpc"
+	"os"
 	"strconv"
 	"time"
 	"uk.ac.bris.cs/gameoflife/stubs"
@@ -167,9 +169,17 @@ func distributor(p Params, c distributorChannels) {
 
 	// TODO: Execute all turns of the Game of Life.
 
+	client, _ := rpc.Dial("tcp", "127.0.0.1:8030")
+	defer func(client *rpc.Client) {
+		err := client.Close()
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(2)
+		}
+	}(client)
+
 	// iterate through the turns
 	for t := 1; t <= p.Turns; t++ {
-		client, _ := rpc.Dial("tcp", "127.0.0.1:8030")
 
 		req := stubs.BrokerRequest{
 			Threads:     p.Threads,
