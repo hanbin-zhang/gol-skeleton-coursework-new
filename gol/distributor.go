@@ -9,11 +9,6 @@ import (
 	"uk.ac.bris.cs/gameoflife/util"
 )
 
-type workerChannels struct {
-	worldSlice  chan [][]uint8
-	flippedCell chan []util.Cell
-}
-
 type distributorChannels struct {
 	events     chan<- Event
 	ioCommand  chan<- ioCommand
@@ -27,53 +22,14 @@ type distributorChannels struct {
 var readMutexSemaphore semaphore.Semaphore
 var renderingSemaphore semaphore.Semaphore
 
-//var realReadMutex sync.Mutex
+// a function that create an empty world
 
-func Append2DSliceByColumn(twoDSlice [][][]uint8) [][]uint8 {
-	newWorld := twoDSlice[0]
-	for i := 1; i < len(twoDSlice); i++ {
-		part := twoDSlice[i]
-		for j := 0; j < len(newWorld); j++ {
-			newWorld[j] = append(newWorld[j], part[j]...)
-		}
+func MakeNewWorld(height, width int) [][]uint8 {
+	newWorld := make([][]uint8, height)
+	for i := range newWorld {
+		newWorld[i] = make([]uint8, width)
 	}
-
 	return newWorld
-}
-
-func rpcWorker(ip string, p Params, world [][]uint8, serverID, serverNumber int, c chan stubs.Response, isLast bool) {
-
-	startX := 0
-	endX := 0
-	threads := p.Threads
-
-	if serverID != serverNumber-1 {
-		startX = p.ImageWidth / serverNumber * serverID
-		endX = p.ImageWidth / serverNumber * (serverID + 1)
-
-	} else {
-		startX = p.ImageWidth / serverNumber * serverID
-		endX = p.ImageWidth
-	}
-
-	request := stubs.Request{Threads: threads,
-		ImageWidth:  p.ImageWidth,
-		ImageHeight: p.ImageHeight,
-		StartX:      startX,
-		EndX:        endX,
-		StartY:      0,
-		EndY:        p.ImageHeight,
-		World:       world}
-
-	response := new(stubs.Response)
-	//fmt.Println(ip)
-	client, _ := rpc.Dial("tcp", ip)
-	defer client.Close()
-
-	client.Call(stubs.GolHandler, request, &response)
-
-	c <- *response
-
 }
 
 func timer(p Params, currentState *[][]uint8, turns *int, eventChan chan<- Event, isEventChannelClosed *bool) {
@@ -92,22 +48,6 @@ func timer(p Params, currentState *[][]uint8, turns *int, eventChan chan<- Event
 			return
 		}
 	}
-}
-
-func MakeImmutableMatrix(matrix [][]uint8) func(y, x int) uint8 {
-	return func(y, x int) uint8 {
-		return matrix[y][x]
-	}
-}
-
-// a function that create an empty world
-
-func MakeNewWorld(height, width int) [][]uint8 {
-	newWorld := make([][]uint8, height)
-	for i := range newWorld {
-		newWorld[i] = make([]uint8, width)
-	}
-	return newWorld
 }
 
 // calculate all alive cells.
@@ -146,60 +86,6 @@ func saveFile(c distributorChannels, p Params, world [][]uint8, turn int) {
 		}
 	}
 
-}
-
-func worker(startY, endY, startX, endX int, data func(y, x int) uint8, out workerChannels, p Params) {
-	work, workFlipped := calculateSliceNextState(startY, endY, startX, endX, data, p)
-	out.worldSlice <- work
-	out.flippedCell <- workFlipped
-}
-
-func calculateSliceNextState(startY, endY, startX, endX int, data func(y, x int) uint8, p Params) ([][]uint8, []util.Cell) {
-	height := endY - startY
-	width := endX - startX
-
-	nextSLice := MakeNewWorld(height, width)
-	var flippedCell []util.Cell
-	for i := startY; i < endY; i++ {
-		for j := startX; j < endX; j++ {
-			numberLive := 0
-			for _, l := range [3]int{j - 1, j, j + 1} {
-				for _, k := range [3]int{i - 1, i, i + 1} {
-					newK := (k + p.ImageHeight) % p.ImageHeight
-					newL := (l + p.ImageWidth) % p.ImageWidth
-					if data(newK, newL) == 255 {
-						numberLive++
-					}
-				}
-			}
-			if data(i, j) == 255 {
-				numberLive -= 1
-				if numberLive < 2 {
-					nextSLice[i-startY][j-startX] = 0
-					cell := util.Cell{X: j, Y: i}
-					flippedCell = append(flippedCell, cell)
-					//c.events <- CellFlipped{Cell: cell, CompletedTurns: turn}
-				} else if numberLive > 3 {
-					nextSLice[i-startY][j-startX] = 0
-					cell := util.Cell{X: j, Y: i}
-					flippedCell = append(flippedCell, cell)
-					//c.events <- CellFlipped{Cell: cell, CompletedTurns: turn}
-				} else {
-					nextSLice[i-startY][j-startX] = 255
-				}
-			} else {
-				if numberLive == 3 {
-					nextSLice[i-startY][j-startX] = 255
-					cell := util.Cell{X: j, Y: i}
-					flippedCell = append(flippedCell, cell)
-					//c.events <- CellFlipped{Cell: cell, CompletedTurns: turn}
-				} else {
-					nextSLice[i-startY][j-startX] = 0
-				}
-			}
-		}
-	}
-	return nextSLice, flippedCell
 }
 
 func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int, isEventChannelClosed *bool) {
@@ -242,42 +128,6 @@ func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int
 	}
 }
 
-func calculateNextState(world [][]uint8, p Params) ([][]uint8, []util.Cell) {
-	data := MakeImmutableMatrix(world)
-	// iterate through the cells
-	var newPixelData [][]uint8
-	var flipped []util.Cell
-	if p.Threads == 1 {
-		newPixelData, flipped = calculateSliceNextState(0, p.ImageHeight, 0, p.ImageWidth, data, p)
-	} else {
-		ChanSlice := make([]workerChannels, p.Threads)
-
-		for i := 0; i < p.Threads; i++ {
-			ChanSlice[i].worldSlice = make(chan [][]uint8)
-			ChanSlice[i].flippedCell = make(chan []util.Cell)
-		}
-		for i := 0; i < p.Threads-1; i++ {
-			go worker(int(float32(p.ImageHeight)*(float32(i)/float32(p.Threads))),
-				int(float32(p.ImageHeight)*(float32(i+1)/float32(p.Threads))),
-				0, p.ImageWidth, data, ChanSlice[i], p)
-		}
-		go worker(int(float32(p.ImageHeight)*(float32(p.Threads-1)/float32(p.Threads))),
-			p.ImageHeight,
-			0, p.ImageWidth, data, ChanSlice[p.Threads-1], p)
-
-		MakeImmutableMatrix(newPixelData)
-		for i := 0; i < p.Threads; i++ {
-
-			part := <-ChanSlice[i].worldSlice
-			newPixelData = append(newPixelData, part...)
-
-			flippedPart := <-ChanSlice[i].flippedCell
-			flipped = append(flipped, flippedPart...)
-		}
-	}
-	return newPixelData, flipped
-}
-
 // distributor divides the work between workers and interacts with other goroutines.
 func distributor(p Params, c distributorChannels) {
 
@@ -317,34 +167,24 @@ func distributor(p Params, c distributorChannels) {
 
 	// TODO: Execute all turns of the Game of Life.
 
-	IPs := []string{"127.0.0.1:8030", "127.0.0.1:8040", "127.0.0.1:8050"}
 	// iterate through the turns
 	for t := 1; t <= p.Turns; t++ {
-		chanSlice := make([]chan stubs.Response, len(IPs))
+		client, _ := rpc.Dial("tcp", "127.0.0.1:8030")
 
-		for n := 0; n < len(IPs); n++ {
-			chanSlice[n] = make(chan stubs.Response)
+		req := stubs.BrokerRequest{
+			Threads:     p.Threads,
+			ImageWidth:  p.ImageWidth,
+			ImageHeight: p.ImageHeight,
+			World:       world,
 		}
 
-		for n := 0; n < len(IPs)-1; n++ {
-			go rpcWorker(IPs[n], p, world, n, len(IPs), chanSlice[n], false)
-		}
+		res := new(stubs.Response)
 
-		go rpcWorker(IPs[len(IPs)-1], p, world, len(IPs)-1, len(IPs), chanSlice[len(IPs)-1], true)
+		_ = client.Call(stubs.BrokerCalculate, req, res)
 
-		var nextWorld [][]uint8
-		var flipped []util.Cell
-		SliceOf2DSlice := make([][][]uint8, len(chanSlice))
+		nextWorld := res.NewWorld
 
-		for n := 0; n < len(IPs); n++ {
-			response := <-chanSlice[n]
-
-			SliceOf2DSlice[n] = response.NewWorld
-			flipped = append(flipped, response.FlippedCell...)
-		}
-
-		nextWorld = Append2DSliceByColumn(SliceOf2DSlice)
-		//fmt.Println(flipped)
+		flipped := res.FlippedCell
 
 		//a parallel way to calculate all cells flipped
 		for _, cell := range flipped {
@@ -353,22 +193,6 @@ func distributor(p Params, c distributorChannels) {
 				Cell:           cell,
 			}
 		}
-		//fmt.Println(turn)
-		//time.Sleep(10 * time.Second)
-
-		// this is a local way to calculate the cell flipped
-		// inefficient but friendly and easy and local
-		/*for h := 0; h < p.ImageHeight; h++ {
-			for w := 0; w < p.ImageWidth; w++ {
-				if world[h][w] != newPixelData[h][w] {
-					cell := util.Cell{X: w, Y: h}
-					c.events <- CellFlipped{
-						CompletedTurns: turn,
-						Cell:           cell,
-					}
-				}
-			}
-		}*/
 
 		renderingSemaphore.Wait()
 		c.events <- TurnComplete{CompletedTurns: turn}
@@ -383,7 +207,7 @@ func distributor(p Params, c distributorChannels) {
 
 	}
 
-	// HANBIN: sometimes, is just not too good to to something too early
+	// HANBIN: sometimes, is just not too good to something too early
 	//
 	//
 	//

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/rpc"
+	"os"
 	"uk.ac.bris.cs/gameoflife/gol"
 	"uk.ac.bris.cs/gameoflife/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
@@ -123,6 +124,7 @@ func (g *GolOperations) CalculateCellFlipped(req stubs.Request, res *stubs.Respo
 
 	res.NewWorld = nextWorld
 	res.FlippedCell = flippedCell
+	res.SliceNumber = req.SliceNumber
 	return
 }
 
@@ -138,7 +140,14 @@ func main() {
 	}
 
 	client, _ := rpc.Dial("tcp", *bAddr)
-	defer client.Close()
+	defer func(client *rpc.Client) {
+		err := client.Close()
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(2)
+		}
+	}(client)
+
 	subscribe := stubs.Subscription{NodeAddress: *pAddr, Callback: stubs.GolHandler}
 	res := new(stubs.StatusReport)
 	_ = client.Go(stubs.Subscribe, subscribe, res, nil)
@@ -154,5 +163,4 @@ func main() {
 
 	fmt.Println("Server ready:", *pAddr)
 	rpc.Accept(listener)
-
 }
