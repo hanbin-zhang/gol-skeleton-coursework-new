@@ -17,8 +17,6 @@ type Response struct {
 type Request struct {
 	Threads     int
 	SliceNumber int
-	ImageWidth  int
-	ImageHeight int
 	StartY      int
 	EndY        int
 	StartX      int

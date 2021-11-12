@@ -6,6 +6,7 @@ import (
 	"github.com/ChrisGora/semaphore"
 	"net"
 	"net/rpc"
+	"uk.ac.bris.cs/gameoflife/gol"
 	"uk.ac.bris.cs/gameoflife/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
 )
@@ -16,6 +17,27 @@ var (
 	nodeNumber      int
 	nodeNumberMutex semaphore.Semaphore
 )
+
+func MakeImmutableMatrix(matrix [][]uint8) func(y, x int) uint8 {
+	return func(y, x int) uint8 {
+		return matrix[y][x]
+	}
+}
+
+func cutPartialSlice(startX, endX, startY, endY int, data func(y, x int) uint8) [][]uint8 {
+	width := endX - startX
+	height := endY - startY
+
+	part := gol.MakeNewWorld(height, width)
+
+	for h := startY; h < endY; h++ {
+		for w := startX; w < endX; w++ {
+			part[h-startY][w-startX] = data(h, w)
+		}
+	}
+
+	return part
+}
 
 func Append2DSliceByColumn(twoDSlice [][][]uint8) [][]uint8 {
 	newWorld := twoDSlice[0]
@@ -89,12 +111,11 @@ func (b *Broker) CalculateNextState(req stubs.BrokerRequest, res *stubs.Response
 	presentNodeNumber := nodeNumber
 	nodeNumberMutex.Post()
 	world := req.World
+	data := MakeImmutableMatrix(world)
 
 	if presentNodeNumber == 1 {
 		nodeRequest := stubs.Request{Threads: req.Threads,
 			SliceNumber: 0,
-			ImageWidth:  req.ImageWidth,
-			ImageHeight: req.ImageHeight,
 			StartY:      0,
 			EndY:        req.ImageHeight,
 			StartX:      0,
@@ -106,27 +127,28 @@ func (b *Broker) CalculateNextState(req stubs.BrokerRequest, res *stubs.Response
 	} else {
 
 		for n := 0; n < presentNodeNumber-1; n++ {
-
+			startX := req.ImageWidth / presentNodeNumber * n
+			endX := req.ImageWidth / presentNodeNumber * (n + 1)
+			part := cutPartialSlice(startX, endX, 0, req.ImageHeight, data)
 			nodeRequest := stubs.Request{Threads: req.Threads,
 				SliceNumber: n,
-				ImageWidth:  req.ImageWidth,
-				ImageHeight: req.ImageHeight,
 				StartY:      0,
 				EndY:        req.ImageHeight,
-				StartX:      req.ImageWidth / presentNodeNumber * n,
-				EndX:        req.ImageWidth / presentNodeNumber * (n + 1),
-				World:       world}
+				StartX:      startX,
+				EndX:        endX,
+				World:       part}
 			requestChannel <- nodeRequest
 		}
+		startX := req.ImageWidth / presentNodeNumber * (presentNodeNumber - 1)
+		endX := req.ImageWidth
+		part := cutPartialSlice(startX, endX, 0, req.ImageHeight, data)
 		lastNodeRequest := stubs.Request{Threads: req.Threads,
 			SliceNumber: presentNodeNumber - 1,
-			ImageWidth:  req.ImageWidth,
-			ImageHeight: req.ImageHeight,
 			StartY:      0,
 			EndY:        req.ImageHeight,
-			StartX:      req.ImageWidth / presentNodeNumber * (presentNodeNumber - 1),
-			EndX:        req.ImageWidth,
-			World:       world}
+			StartX:      startX,
+			EndX:        endX,
+			World:       part}
 
 		requestChannel <- lastNodeRequest
 	}
