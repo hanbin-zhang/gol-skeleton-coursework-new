@@ -15,6 +15,7 @@ var (
 	responseChannel chan stubs.Response
 	nodeNumber      int
 	nodeNumberMutex semaphore.Semaphore
+	world           [][]uint8
 )
 
 func Append2DSliceByColumn(twoDSlice [][][]uint8) [][]uint8 {
@@ -88,7 +89,7 @@ func (b *Broker) CalculateNextState(req stubs.BrokerRequest, res *stubs.Response
 	nodeNumberMutex.Wait()
 	presentNodeNumber := nodeNumber
 	nodeNumberMutex.Post()
-	world := req.World
+	world = req.World
 
 	if presentNodeNumber == 1 {
 		nodeRequest := stubs.Request{Threads: req.Threads,

@@ -23,6 +23,7 @@ type distributorChannels struct {
 
 var readMutexSemaphore semaphore.Semaphore
 var renderingSemaphore semaphore.Semaphore
+var turn int
 
 // a function that create an empty world
 
@@ -69,15 +70,12 @@ func calculateAliveCells(p Params, world [][]byte) []util.Cell {
 func saveFile(c distributorChannels, p Params, world [][]uint8, turn int) {
 
 	//fmt.Println(p)
+
+	readMutexSemaphore.Wait()
+	//realReadMutex.Lock()
 	c.ioCommand <- ioOutput
 	outputFilename := strconv.Itoa(p.ImageHeight) + "x" + strconv.Itoa(p.ImageWidth) + "x" + strconv.Itoa(turn)
 	c.ioFilename <- outputFilename
-	readMutexSemaphore.Wait()
-	//realReadMutex.Lock()
-
-	//realReadMutex.Unlock()
-	readMutexSemaphore.Post()
-	//fmt.Println(world)
 
 	if len(world) == 0 {
 		return
@@ -87,6 +85,10 @@ func saveFile(c distributorChannels, p Params, world [][]uint8, turn int) {
 			c.ioOutput <- world[y][x]
 		}
 	}
+
+	//realReadMutex.Unlock()
+	readMutexSemaphore.Post()
+	//fmt.Println(world)
 
 }
 
@@ -151,7 +153,7 @@ func distributor(p Params, c distributorChannels) {
 		}
 	}
 
-	turn := 0
+	turn = 0
 
 	//fmt.Println(calculateAliveCells(p, world))
 	for _, cell := range calculateAliveCells(p, world) {
