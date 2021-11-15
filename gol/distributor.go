@@ -3,6 +3,7 @@ package gol
 import (
 	"fmt"
 	"github.com/ChrisGora/semaphore"
+	"net"
 	"net/rpc"
 	"os"
 	"strconv"
@@ -181,43 +182,21 @@ func distributor(p Params, c distributorChannels) {
 	}(client)
 
 	// iterate through the turns
-	for t := 1; t <= p.Turns; t++ {
-
-		req := stubs.BrokerRequest{
-			Threads:     p.Threads,
-			ImageWidth:  p.ImageWidth,
-			ImageHeight: p.ImageHeight,
-			World:       world,
-		}
-
-		res := new(stubs.Response)
-
-		_ = client.Call(stubs.BrokerCalculate, req, res)
-
-		nextWorld := res.NewWorld
-
-		flipped := res.FlippedCell
-
-		//a parallel way to calculate all cells flipped
-		for _, cell := range flipped {
-			c.events <- CellFlipped{
-				CompletedTurns: turn,
-				Cell:           cell,
-			}
-		}
-
-		renderingSemaphore.Wait()
-		c.events <- TurnComplete{CompletedTurns: turn}
-		renderingSemaphore.Post()
-
-		readMutexSemaphore.Wait()
-		//realReadMutex.Lock()
-		turn++
-		world = nextWorld
-		//realReadMutex.Unlock()
-		readMutexSemaphore.Post()
-
+	req := stubs.BrokerRequest{
+		Threads:     p.Threads,
+		ImageWidth:  p.ImageWidth,
+		ImageHeight: p.ImageHeight,
+		World:       world,
 	}
+
+	res := new(stubs.Response)
+
+	_ = client.Go(stubs.BrokerCalculate, req, res, nil)
+
+	listener, _ := net.Listen("tcp", "127.0.0.1:8050")
+	defer listener.Close()
+
+	go rpc.Accept(listener)
 
 	// HANBIN: sometimes, is just not too good to something too early
 	//

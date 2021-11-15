@@ -27,6 +27,7 @@ type Request struct {
 }
 
 type BrokerRequest struct {
+	Turns       int
 	Threads     int
 	ImageWidth  int
 	ImageHeight int
