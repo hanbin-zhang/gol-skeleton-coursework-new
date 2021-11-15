@@ -121,7 +121,11 @@ func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int
 				// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 				*isEventChannelClosed = true
 				l := *listener
-				l.Close()
+				err := l.Close()
+				if err != nil {
+					fmt.Println(err)
+					return
+				}
 				close(c.events)
 				//os.Exit(2)
 			}
@@ -168,7 +172,17 @@ func (d *DistributorOperations) SendToSdl(req stubs.SDLRequest, res *stubs.Statu
 }
 
 // distributor divides the work between workers and interacts with other goroutines.
-func distributor(p Params, c distributorChannels) {
+func distributor(p Params, c distributorChannels) { /*
+		for  {
+			listener, errL := net.Listen("tcp", "127.0.0.1:8080")
+			fmt.Println(errL)
+			if errL==nil {
+				listener.Close()
+				break
+			}
+		}*/
+	listener, errL := net.Listen("tcp", "127.0.0.1:8080")
+	fmt.Println(errL)
 	_ = rpc.Register(&DistributorOperations{})
 	readMutexSemaphore = semaphore.Init(1, 1)
 	renderingSemaphore = semaphore.Init(1, 1)
@@ -203,7 +217,7 @@ func distributor(p Params, c distributorChannels) {
 
 	// set the timer
 	go timer(p, &world, &turn, c.events, &isEventChannelClosed)
-	listener, _ := net.Listen("tcp", "127.0.0.1:8080")
+
 	go checkKeyPresses(p, c, world, &turn, &isEventChannelClosed, &listener)
 
 	// TODO: Execute all turns of the Game of Life.
@@ -232,7 +246,7 @@ func distributor(p Params, c distributorChannels) {
 		cDone := make(chan *rpc.Call, 1)
 		_ = client.Go(stubs.BrokerCalculate, req, nil, cDone)
 
-		fmt.Println(callBackIP)
+		fmt.Println(listener)
 
 		go rpc.Accept(listener)
 
@@ -257,12 +271,11 @@ func distributor(p Params, c distributorChannels) {
 
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 	isEventChannelClosed = true
-	fmt.Println(listener)
-	if listener != nil {
-		err := listener.Close()
-		if err != nil {
-			return
-		}
+	fmt.Println(listener, p.ImageWidth)
+
+	err := listener.Close()
+	if err != nil {
+		return
 	}
 	close(c.events)
 	//os.Exit(2)
