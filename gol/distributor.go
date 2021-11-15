@@ -22,7 +22,7 @@ type distributorChannels struct {
 	keyPresses <-chan rune
 }
 
-type DistributorOperations struct {}
+type DistributorOperations struct{}
 
 var readMutexSemaphore semaphore.Semaphore
 var renderingSemaphore semaphore.Semaphore
@@ -30,6 +30,7 @@ var turn int
 var channels distributorChannels
 var turnComplete chan bool
 var world [][]uint8
+
 // a function that create an empty world
 
 func MakeNewWorld(height, width int) [][]uint8 {
@@ -137,7 +138,7 @@ func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int
 	}
 }
 
-func (d *DistributorOperations) SendToSdl(req stubs.SDLRequest, res stubs.StatusReport) {
+func (d *DistributorOperations) SendToSdl(req stubs.SDLRequest, res *stubs.StatusReport) (err error) {
 	flipped := req.FlippedCell
 
 	renderingSemaphore.Wait()
@@ -148,15 +149,17 @@ func (d *DistributorOperations) SendToSdl(req stubs.SDLRequest, res stubs.Status
 			CompletedTurns: turn,
 			Cell:           cell,
 		}
-		if  {
-
+		if world[cell.Y][cell.X] == 255 {
+			world[cell.Y][cell.X] = 0
+		} else if world[cell.Y][cell.X] == 0 {
+			world[cell.Y][cell.X] = 255
 		}
 	}
 
 	channels.events <- TurnComplete{CompletedTurns: turn}
 	readMutexSemaphore.Post()
 	renderingSemaphore.Post()
-	turnComplete<-true
+	turnComplete <- true
 	return
 }
 
@@ -216,15 +219,16 @@ func distributor(p Params, c distributorChannels) {
 		ImageWidth:  p.ImageWidth,
 		ImageHeight: p.ImageHeight,
 		World:       world,
-		CallBackIP: callBackIP,
+		CallBackIP:  callBackIP,
 	}
 
 	res := new(stubs.Response)
 
 	_ = client.Go(stubs.BrokerCalculate, req, res, nil)
 
-	listener, _ := net.Listen("tcp", callBackIP)
-	defer listener.Close()
+	fmt.Println(callBackIP)
+	listener, _ := net.Listen("tcp", ":8080")
+	//defer listener.Close()
 
 	go rpc.Accept(listener)
 

@@ -6,6 +6,7 @@ import (
 	"github.com/ChrisGora/semaphore"
 	"net"
 	"net/rpc"
+	"time"
 	"uk.ac.bris.cs/gameoflife/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
 )
@@ -89,7 +90,9 @@ func (b *Broker) Subscribe(req stubs.Subscription, res *stubs.StatusReport) (err
 
 func (b *Broker) CalculateNextState(req stubs.BrokerRequest, res *stubs.Response) (err error) {
 	world = req.World
+
 	turn = 0
+	time.Sleep(5 * time.Second)
 	client, _ := rpc.Dial("tcp", req.CallBackIP)
 	defer client.Close()
 	for t := 1; t <= req.Turns; t++ {
