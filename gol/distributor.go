@@ -22,10 +22,14 @@ type distributorChannels struct {
 	keyPresses <-chan rune
 }
 
+type DistributorOperations struct {}
+
 var readMutexSemaphore semaphore.Semaphore
 var renderingSemaphore semaphore.Semaphore
 var turn int
-
+var channels distributorChannels
+var turnComplete chan bool
+var world [][]uint8
 // a function that create an empty world
 
 func MakeNewWorld(height, width int) [][]uint8 {
@@ -133,11 +137,36 @@ func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int
 	}
 }
 
+func (d *DistributorOperations) SendToSdl(req stubs.SDLRequest, res stubs.StatusReport) {
+	flipped := req.FlippedCell
+
+	renderingSemaphore.Wait()
+	readMutexSemaphore.Wait()
+	//a parallel way to calculate all cells flipped
+	for _, cell := range flipped {
+		channels.events <- CellFlipped{
+			CompletedTurns: turn,
+			Cell:           cell,
+		}
+		if  {
+
+		}
+	}
+
+	channels.events <- TurnComplete{CompletedTurns: turn}
+	readMutexSemaphore.Post()
+	renderingSemaphore.Post()
+	turnComplete<-true
+	return
+}
+
 // distributor divides the work between workers and interacts with other goroutines.
 func distributor(p Params, c distributorChannels) {
-
+	_ = rpc.Register(&DistributorOperations{})
 	readMutexSemaphore = semaphore.Init(1, 1)
 	renderingSemaphore = semaphore.Init(1, 1)
+	turnComplete = make(chan bool)
+	channels = c
 
 	isEventChannelClosed := false
 	// let io start input
@@ -147,7 +176,7 @@ func distributor(p Params, c distributorChannels) {
 	c.ioFilename <- filename
 
 	// TODO: Create a 2D slice to store the world.
-	world := MakeNewWorld(p.ImageHeight, p.ImageWidth)
+	world = MakeNewWorld(p.ImageHeight, p.ImageWidth)
 	for h := 0; h < p.ImageHeight; h++ {
 		for w := 0; w < p.ImageWidth; w++ {
 			world[h][w] = <-c.ioInput
@@ -180,29 +209,29 @@ func distributor(p Params, c distributorChannels) {
 			os.Exit(2)
 		}
 	}(client)
-
+	callBackIP := "127.0.0.1:8080"
 	// iterate through the turns
 	req := stubs.BrokerRequest{
 		Threads:     p.Threads,
 		ImageWidth:  p.ImageWidth,
 		ImageHeight: p.ImageHeight,
 		World:       world,
+		CallBackIP: callBackIP,
 	}
 
 	res := new(stubs.Response)
 
 	_ = client.Go(stubs.BrokerCalculate, req, res, nil)
 
-	listener, _ := net.Listen("tcp", "127.0.0.1:8050")
+	listener, _ := net.Listen("tcp", callBackIP)
 	defer listener.Close()
 
 	go rpc.Accept(listener)
 
-	// HANBIN: sometimes, is just not too good to something too early
-	//
-	//
-	//
-	//fmt.Println("aaa")
+	for i := 1; i <= p.Turns; i++ {
+		<-turnComplete
+	}
+
 	saveFile(c, p, world, turn)
 
 	// TODO: output proceeded map IO

@@ -7,6 +7,7 @@ import (
 var GolHandler = "GolOperations.CalculateCellFlipped"
 var Subscribe = "Broker.Subscribe"
 var BrokerCalculate = "Broker.CalculateNextState"
+var SDLSender = "DistributorOperations.SendToSdl"
 
 type Response struct {
 	FlippedCell []util.Cell
@@ -32,6 +33,7 @@ type BrokerRequest struct {
 	ImageWidth  int
 	ImageHeight int
 	World       [][]uint8
+	CallBackIP  string
 }
 
 type Subscription struct {
@@ -41,4 +43,8 @@ type Subscription struct {
 
 type StatusReport struct {
 	Message string
+}
+
+type SDLRequest struct {
+	FlippedCell []util.Cell
 }
