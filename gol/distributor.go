@@ -52,7 +52,8 @@ func makeImmutableMatrix(matrix [][]uint8) func(y, x int) uint8 {
 }
 
 // a function that create an empty world
-func makeNewWorld(height, width int) [][]uint8 {
+
+func MakeNewWorld(height, width int) [][]uint8 {
 	newWorld := make([][]uint8, height)
 	for i := range newWorld {
 		newWorld[i] = make([]uint8, width)
@@ -108,7 +109,7 @@ func calculateSliceNextState(startY, endY, startX, endX int, data func(y, x int)
 	height := endY - startY
 	width := endX - startX
 
-	nextSLice := makeNewWorld(height, width)
+	nextSLice := MakeNewWorld(height, width)
 	var flippedCell []util.Cell
 	for i := startY; i < endY; i++ {
 		for j := startX; j < endX; j++ {
@@ -243,7 +244,7 @@ func distributor(p Params, c distributorChannels) {
 	c.ioFilename <- filename
 
 	// TODO: Create a 2D slice to store the world.
-	world := makeNewWorld(p.ImageHeight, p.ImageWidth)
+	world := MakeNewWorld(p.ImageHeight, p.ImageWidth)
 	for h := 0; h < p.ImageHeight; h++ {
 		for w := 0; w < p.ImageWidth; w++ {
 			world[h][w] = <-c.ioInput
