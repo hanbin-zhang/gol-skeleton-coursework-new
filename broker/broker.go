@@ -6,7 +6,6 @@ import (
 	"github.com/ChrisGora/semaphore"
 	"net"
 	"net/rpc"
-	"time"
 	"uk.ac.bris.cs/gameoflife/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
 )
@@ -17,8 +16,8 @@ var (
 	nodeNumber           int
 	nodeNumberMutex      semaphore.Semaphore
 	worldUpdateSemaphore semaphore.Semaphore
-	world                [][]uint8
-	turn                 int
+	//world                [][]uint8
+	turn int
 )
 
 func Append2DSliceByColumn(twoDSlice [][][]uint8) [][]uint8 {
@@ -89,12 +88,12 @@ func (b *Broker) Subscribe(req stubs.Subscription, res *stubs.StatusReport) (err
 }
 
 func (b *Broker) CalculateNextState(req stubs.BrokerRequest, res *stubs.Response) (err error) {
-	world = req.World
+	world := req.World
 
 	turn = 0
-	time.Sleep(5 * time.Second)
-	client, _ := rpc.Dial("tcp", req.CallBackIP)
-	defer client.Close()
+	fmt.Println(req.CallBackIP)
+
+	fmt.Println(req.Turns)
 	for t := 1; t <= req.Turns; t++ {
 		nodeNumberMutex.Wait()
 		presentNodeNumber := nodeNumber
@@ -139,7 +138,6 @@ func (b *Broker) CalculateNextState(req stubs.BrokerRequest, res *stubs.Response
 
 			requestChannel <- lastNodeRequest
 		}
-
 		var nextWorld [][]uint8
 		var flipped []util.Cell
 		SliceOf2DSlice := make([][][]uint8, presentNodeNumber)
@@ -156,14 +154,19 @@ func (b *Broker) CalculateNextState(req stubs.BrokerRequest, res *stubs.Response
 
 		worldUpdateSemaphore.Wait()
 		turn++
-		res.NewWorld = nextWorld
+		world = nextWorld
 		worldUpdateSemaphore.Post()
-		SDLRequest := stubs.SDLRequest{FlippedCell: flipped}
+		SDLRequest := stubs.SDLRequest{FlippedCell: flipped, Turn: t}
 		SDLRes := new(stubs.StatusReport)
-
-		_ = client.Call(stubs.SDLSender, SDLRequest, SDLRes)
+		client, _ := rpc.Dial("tcp", req.CallBackIP)
+		err = client.Call(stubs.SDLSender, SDLRequest, SDLRes)
+		if err != nil {
+			fmt.Println(err)
+			break
+		}
+		client.Close()
 	}
-	return err
+	return
 }
 
 func main() {

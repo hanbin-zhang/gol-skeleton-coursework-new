@@ -98,7 +98,7 @@ func saveFile(c distributorChannels, p Params, world [][]uint8, turn int) {
 
 }
 
-func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int, isEventChannelClosed *bool) {
+func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int, isEventChannelClosed *bool, listener *net.Listener) {
 
 	for {
 		//fmt.Println("sas")
@@ -120,6 +120,8 @@ func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int
 
 				// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 				*isEventChannelClosed = true
+				l := *listener
+				l.Close()
 				close(c.events)
 				//os.Exit(2)
 			}
@@ -144,6 +146,8 @@ func (d *DistributorOperations) SendToSdl(req stubs.SDLRequest, res *stubs.Statu
 	renderingSemaphore.Wait()
 	readMutexSemaphore.Wait()
 	//a parallel way to calculate all cells flipped
+	//fmt.Println(flipped)
+	turn = req.Turn
 	for _, cell := range flipped {
 		channels.events <- CellFlipped{
 			CompletedTurns: turn,
@@ -199,44 +203,46 @@ func distributor(p Params, c distributorChannels) {
 
 	// set the timer
 	go timer(p, &world, &turn, c.events, &isEventChannelClosed)
-
-	go checkKeyPresses(p, c, world, &turn, &isEventChannelClosed)
+	listener, _ := net.Listen("tcp", "127.0.0.1:8080")
+	go checkKeyPresses(p, c, world, &turn, &isEventChannelClosed, &listener)
 
 	// TODO: Execute all turns of the Game of Life.
 
-	client, _ := rpc.Dial("tcp", "127.0.0.1:8030")
-	defer func(client *rpc.Client) {
-		err := client.Close()
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(2)
+	if p.Turns > 0 {
+		client, _ := rpc.Dial("tcp", "127.0.0.1:8030")
+		defer func(client *rpc.Client) {
+			err := client.Close()
+			if err != nil {
+				fmt.Println(err)
+				os.Exit(2)
+			}
+		}(client)
+		callBackIP := "127.0.0.1:8080"
+		// iterate through the turns
+		req := stubs.BrokerRequest{
+			Turns:       p.Turns,
+			Threads:     p.Threads,
+			ImageWidth:  p.ImageWidth,
+			ImageHeight: p.ImageHeight,
+			World:       world,
+			CallBackIP:  callBackIP,
 		}
-	}(client)
-	callBackIP := "127.0.0.1:8080"
-	// iterate through the turns
-	req := stubs.BrokerRequest{
-		Threads:     p.Threads,
-		ImageWidth:  p.ImageWidth,
-		ImageHeight: p.ImageHeight,
-		World:       world,
-		CallBackIP:  callBackIP,
+
+		//res := new(stubs.Response)
+		cDone := make(chan *rpc.Call, 1)
+		_ = client.Go(stubs.BrokerCalculate, req, nil, cDone)
+
+		fmt.Println(callBackIP)
+
+		go rpc.Accept(listener)
+
+		for i := 1; i <= p.Turns; i++ {
+			<-turnComplete
+		}
+		<-cDone
 	}
 
-	res := new(stubs.Response)
-
-	_ = client.Go(stubs.BrokerCalculate, req, res, nil)
-
-	fmt.Println(callBackIP)
-	listener, _ := net.Listen("tcp", ":8080")
-	//defer listener.Close()
-
-	go rpc.Accept(listener)
-
-	for i := 1; i <= p.Turns; i++ {
-		<-turnComplete
-	}
-
-	saveFile(c, p, world, turn)
+	saveFile(c, p, world, p.Turns)
 
 	// TODO: output proceeded map IO
 	// TODO: Report the final state using FinalTurnCompleteEvent.
@@ -251,6 +257,13 @@ func distributor(p Params, c distributorChannels) {
 
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 	isEventChannelClosed = true
+	fmt.Println(listener)
+	if listener != nil {
+		err := listener.Close()
+		if err != nil {
+			return
+		}
+	}
 	close(c.events)
 	//os.Exit(2)
 }

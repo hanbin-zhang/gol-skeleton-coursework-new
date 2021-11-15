@@ -47,4 +47,5 @@ type StatusReport struct {
 
 type SDLRequest struct {
 	FlippedCell []util.Cell
+	Turn        int
 }
