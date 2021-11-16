@@ -3,7 +3,6 @@ package gol
 import (
 	"fmt"
 	"github.com/ChrisGora/semaphore"
-	"net"
 	"net/rpc"
 	"os"
 	"strconv"
@@ -24,7 +23,6 @@ type distributorChannels struct {
 
 type DistributorOperations struct{}
 
-var listener net.Listener
 var readMutexSemaphore semaphore.Semaphore
 var renderingSemaphore semaphore.Semaphore
 var turn int
@@ -64,13 +62,14 @@ func timer(p Params, eventChan chan<- Event, isEventChannelClosed *bool) {
 func calculateAliveCells(p Params, world [][]byte) []util.Cell {
 	var list []util.Cell
 
-	for n := 0; n < p.ImageHeight; n++ {
-		for i := 0; i < p.ImageWidth; i++ {
+	for n := 0; n < len(world); n++ {
+		for i := 0; i < len(world[0]); i++ {
 			if world[n][i] == byte(255) {
 				list = append(list, util.Cell{X: i, Y: n})
 			}
 		}
 	}
+
 	return list
 }
 
@@ -99,7 +98,7 @@ func saveFile(c distributorChannels, p Params, world [][]uint8, turn int) {
 
 }
 
-func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int, isEventChannelClosed *bool, plistener *net.Listener) {
+func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int, isEventChannelClosed *bool, client *rpc.Client) {
 
 	for {
 		//fmt.Println("sas")
@@ -109,12 +108,7 @@ func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int
 			saveFile(c, p, world, *turn)
 		case 'q':
 			{
-				err := listener.Close()
-				if err != nil {
-					fmt.Println(err)
-					return
-				}
-
+				client.Call(stubs.CellFLippedHandler, stubs.CellFlippedRequest{CloseFlag: false}, nil)
 				saveFile(c, p, world, *turn)
 				c.events <- FinalTurnComplete{CompletedTurns: p.Turns, Alive: calculateAliveCells(p, world)}
 
@@ -146,33 +140,6 @@ func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int
 	}
 }
 
-func (d *DistributorOperations) SendToSdl(req stubs.SDLRequest, res *stubs.StatusReport) (err error) {
-	flipped := req.FlippedCell
-
-	renderingSemaphore.Wait()
-	readMutexSemaphore.Wait()
-	//a parallel way to calculate all cells flipped
-	//fmt.Println(flipped)
-	turn = req.Turn
-	for _, cell := range flipped {
-		channels.events <- CellFlipped{
-			CompletedTurns: turn,
-			Cell:           cell,
-		}
-		if world[cell.Y][cell.X] == 255 {
-			world[cell.Y][cell.X] = 0
-		} else if world[cell.Y][cell.X] == 0 {
-			world[cell.Y][cell.X] = 255
-		}
-	}
-
-	channels.events <- TurnComplete{CompletedTurns: turn}
-	readMutexSemaphore.Post()
-	renderingSemaphore.Post()
-	turnComplete <- true
-	return
-}
-
 // distributor divides the work between workers and interacts with other goroutines.
 func distributor(p Params, c distributorChannels) { /*
 		for  {
@@ -183,9 +150,8 @@ func distributor(p Params, c distributorChannels) { /*
 				break
 			}
 		}*/
-	listener, _ = net.Listen("tcp", "127.0.0.1:8080")
 	//fmt.Println(errL)
-	_ = rpc.Register(&DistributorOperations{})
+	//_ = rpc.Register(&DistributorOperations{})
 	readMutexSemaphore = semaphore.Init(1, 1)
 	renderingSemaphore = semaphore.Init(1, 1)
 	turnComplete = make(chan bool)
@@ -220,19 +186,24 @@ func distributor(p Params, c distributorChannels) { /*
 	// set the timer
 	go timer(p, c.events, &isEventChannelClosed)
 
-	go checkKeyPresses(p, c, world, &turn, &isEventChannelClosed, &listener)
+	client, _ := rpc.Dial("tcp", "127.0.0.1:8030")
+	defer func(client *rpc.Client) {
+		err := client.Close()
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(2)
+		}
+	}(client)
+	key := time.Now().String()
+	fmt.Println(key)
+	client.Call(stubs.RefreshHandler, stubs.Request{Key: key}, nil)
+
+	go checkKeyPresses(p, c, world, &turn, &isEventChannelClosed, client)
 
 	// TODO: Execute all turns of the Game of Life.
 
 	if p.Turns > 0 {
-		client, _ := rpc.Dial("tcp", "127.0.0.1:8030")
-		defer func(client *rpc.Client) {
-			err := client.Close()
-			if err != nil {
-				fmt.Println(err)
-				os.Exit(2)
-			}
-		}(client)
+
 		callBackIP := "127.0.0.1:8080"
 		// iterate through the turns
 		req := stubs.BrokerRequest{
@@ -242,20 +213,43 @@ func distributor(p Params, c distributorChannels) { /*
 			ImageHeight: p.ImageHeight,
 			World:       world,
 			CallBackIP:  callBackIP,
+			Key:         key,
 		}
 
 		//res := new(stubs.Response)
 		cDone := make(chan *rpc.Call, 1)
 		_ = client.Go(stubs.BrokerCalculate, req, nil, cDone)
 
-		fmt.Println(listener)
-
-		go rpc.Accept(listener)
-
 		for i := 1; i <= p.Turns; i++ {
-			<-turnComplete
+			stubsReq := stubs.CellFlippedRequest{CloseFlag: true, Key: key}
+			res := new(stubs.SDLRequest)
+
+			client.Call(stubs.CellFLippedHandler, stubsReq, res)
+
+			flipped := res.FlippedCell
+
+			renderingSemaphore.Wait()
+			readMutexSemaphore.Wait()
+			//a parallel way to calculate all cells flipped
+			//fmt.Println(flipped)
+			turn = res.Turn
+			for _, cell := range flipped {
+				channels.events <- CellFlipped{
+					CompletedTurns: turn,
+					Cell:           cell,
+				}
+				if world[cell.Y][cell.X] == 255 {
+					world[cell.Y][cell.X] = 0
+				} else if world[cell.Y][cell.X] == 0 {
+					world[cell.Y][cell.X] = 255
+				}
+			}
+
+			channels.events <- TurnComplete{CompletedTurns: turn}
+			readMutexSemaphore.Post()
+			renderingSemaphore.Post()
 		}
-		<-cDone
+
 	}
 
 	saveFile(c, p, world, p.Turns)
@@ -273,16 +267,6 @@ func distributor(p Params, c distributorChannels) { /*
 
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 	isEventChannelClosed = true
-	fmt.Println(listener, p.ImageWidth)
-	_ = listener.Close()
-
-	/*if listener != nil {
-		err := listener.Close()
-		if err != nil {
-			return
-		}
-	}*/
-
 	close(c.events)
 	//os.Exit(2)
 }

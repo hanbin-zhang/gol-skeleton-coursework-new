@@ -17,7 +17,9 @@ var (
 	nodeNumberMutex      semaphore.Semaphore
 	worldUpdateSemaphore semaphore.Semaphore
 	//world                [][]uint8
-	turn int
+	turn                int
+	closeFlagChan       chan bool
+	cellFlippedChannels map[string]chan stubs.SDLRequest
 )
 
 func Append2DSliceByColumn(twoDSlice [][][]uint8) [][]uint8 {
@@ -156,7 +158,7 @@ func (b *Broker) CalculateNextState(req stubs.BrokerRequest, res *stubs.Response
 		turn++
 		world = nextWorld
 		worldUpdateSemaphore.Post()
-		SDLRequest := stubs.SDLRequest{FlippedCell: flipped, Turn: t}
+		/*SDLRequest := stubs.SDLRequest{FlippedCell: flipped, Turn: t}
 		SDLRes := new(stubs.StatusReport)
 		client, _ := rpc.Dial("tcp", req.CallBackIP)
 		err = client.Call(stubs.SDLSender, SDLRequest, SDLRes)
@@ -165,15 +167,33 @@ func (b *Broker) CalculateNextState(req stubs.BrokerRequest, res *stubs.Response
 			world = nil
 			break
 		}
-		client.Close()
+		client.Close()*/
+
+		cellFlippedChannels[req.Key] <- stubs.SDLRequest{FlippedCell: flipped, Turn: turn}
+
 	}
 	return
+}
+
+func (b *Broker) RefreshChan(request stubs.Request, res *stubs.Response) {
+	cellFlippedChannels[request.Key] = make(chan stubs.SDLRequest)
+	return
+}
+
+func (b *Broker) RequestCellFlipped(req stubs.CellFlippedRequest, res *stubs.SDLRequest) (err error) {
+
+	cellFlipped := <-cellFlippedChannels[req.Key]
+	res.FlippedCell = cellFlipped.FlippedCell
+	res.Turn = cellFlipped.Turn
+	return err
 }
 
 func main() {
 	pAddr := flag.String("port", "8030", "Port to listen on")
 	flag.Parse()
 	_ = rpc.Register(&Broker{})
+	closeFlagChan = make(chan bool)
+	//cellFlippedChan = make(chan stubs.SDLRequest)
 	requestChannel = make(chan stubs.Request)
 	responseChannel = make(chan stubs.Response)
 	nodeNumberMutex = semaphore.Init(1, 1)
