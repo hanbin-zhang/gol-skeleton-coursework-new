@@ -24,7 +24,6 @@ type distributorChannels struct {
 
 type DistributorOperations struct{}
 
-var listener net.Listener
 var readMutexSemaphore semaphore.Semaphore
 var renderingSemaphore semaphore.Semaphore
 var turn int
@@ -42,17 +41,17 @@ func MakeNewWorld(height, width int) [][]uint8 {
 	return newWorld
 }
 
-func timer(p Params, eventChan chan<- Event, isEventChannelClosed *bool) {
+func timer(p Params, currentState *[][]uint8, turns *int, eventChan chan<- Event, isEventChannelClosed *bool) {
 	for {
 		time.Sleep(2 * time.Second)
 
 		if !*isEventChannelClosed {
 			readMutexSemaphore.Wait()
 			//realReadMutex.Lock()
-			number := len(calculateAliveCells(p, world))
+			number := len(calculateAliveCells(p, *currentState))
 			//realReadMutex.Unlock()
 			readMutexSemaphore.Post()
-			eventChan <- AliveCellsCount{CellsCount: number, CompletedTurns: turn}
+			eventChan <- AliveCellsCount{CellsCount: number, CompletedTurns: *turns}
 
 		} else {
 			return
@@ -99,7 +98,7 @@ func saveFile(c distributorChannels, p Params, world [][]uint8, turn int) {
 
 }
 
-func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int, isEventChannelClosed *bool, plistener *net.Listener) {
+func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int, isEventChannelClosed *bool, listener *net.Listener) {
 
 	for {
 		//fmt.Println("sas")
@@ -109,11 +108,6 @@ func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int
 			saveFile(c, p, world, *turn)
 		case 'q':
 			{
-				err := listener.Close()
-				if err != nil {
-					fmt.Println(err)
-					return
-				}
 
 				saveFile(c, p, world, *turn)
 				c.events <- FinalTurnComplete{CompletedTurns: p.Turns, Alive: calculateAliveCells(p, world)}
@@ -126,10 +120,14 @@ func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int
 
 				// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 				*isEventChannelClosed = true
-				//l := *plistener
-
+				l := *listener
+				err := l.Close()
+				if err != nil {
+					fmt.Println(err)
+					return
+				}
 				close(c.events)
-				os.Exit(2)
+				//os.Exit(2)
 			}
 		case 'p':
 			renderingSemaphore.Wait()
@@ -183,8 +181,8 @@ func distributor(p Params, c distributorChannels) { /*
 				break
 			}
 		}*/
-	listener, _ = net.Listen("tcp", "127.0.0.1:8080")
-	//fmt.Println(errL)
+	listener, errL := net.Listen("tcp", "127.0.0.1:8080")
+	fmt.Println(errL)
 	_ = rpc.Register(&DistributorOperations{})
 	readMutexSemaphore = semaphore.Init(1, 1)
 	renderingSemaphore = semaphore.Init(1, 1)
@@ -218,7 +216,7 @@ func distributor(p Params, c distributorChannels) { /*
 	//c.events <- TurnComplete{CompletedTurns: turn}
 
 	// set the timer
-	go timer(p, c.events, &isEventChannelClosed)
+	go timer(p, &world, &turn, c.events, &isEventChannelClosed)
 
 	go checkKeyPresses(p, c, world, &turn, &isEventChannelClosed, &listener)
 
@@ -274,15 +272,11 @@ func distributor(p Params, c distributorChannels) { /*
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 	isEventChannelClosed = true
 	fmt.Println(listener, p.ImageWidth)
-	_ = listener.Close()
 
-	/*if listener != nil {
-		err := listener.Close()
-		if err != nil {
-			return
-		}
-	}*/
-
+	err := listener.Close()
+	if err != nil {
+		return
+	}
 	close(c.events)
 	//os.Exit(2)
 }

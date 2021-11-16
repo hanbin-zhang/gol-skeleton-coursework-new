@@ -162,7 +162,6 @@ func (b *Broker) CalculateNextState(req stubs.BrokerRequest, res *stubs.Response
 		err = client.Call(stubs.SDLSender, SDLRequest, SDLRes)
 		if err != nil {
 			fmt.Println(err)
-			world = nil
 			break
 		}
 		client.Close()
