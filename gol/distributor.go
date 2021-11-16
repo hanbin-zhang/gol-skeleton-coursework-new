@@ -98,7 +98,7 @@ func saveFile(c distributorChannels, p Params, world [][]uint8, turn int) {
 
 }
 
-func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int, isEventChannelClosed *bool, listener *net.Listener) {
+func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int, isEventChannelClosed *bool, listener *net.Listener, client *rpc.Client) {
 
 	for {
 		//fmt.Println("sas")
@@ -127,7 +127,7 @@ func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int
 					return
 				}
 				close(c.events)
-				//os.Exit(2)
+				os.Exit(2)
 			}
 		case 'p':
 			renderingSemaphore.Wait()
@@ -140,7 +140,32 @@ func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int
 			}
 			renderingSemaphore.Post()
 			c.events <- StateChange{*turn, Executing}
+		case 'k':
+			readMutexSemaphore.Wait()
+			res := new(stubs.Response)
+			client.Go(stubs.BrokerShutDownHandler, stubs.Request{}, res, nil)
+			readMutexSemaphore.Post()
+			saveFile(c, p, world, *turn)
+			c.events <- FinalTurnComplete{CompletedTurns: p.Turns, Alive: calculateAliveCells(p, world)}
+
+			// Make sure that the Io has finished any output before exiting.
+			c.ioCommand <- ioCheckIdle
+			<-c.ioIdle
+
+			c.events <- StateChange{*turn, Quitting}
+
+			// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
+			*isEventChannelClosed = true
+			l := *listener
+			err := l.Close()
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+			close(c.events)
+			os.Exit(2)
 		}
+
 	}
 }
 
@@ -181,8 +206,8 @@ func distributor(p Params, c distributorChannels) { /*
 				break
 			}
 		}*/
-	listener, errL := net.Listen("tcp", "127.0.0.1:8080")
-	fmt.Println(errL)
+	listener, _ := net.Listen("tcp", "127.0.0.1:8080")
+	//fmt.Println(errL)
 	_ = rpc.Register(&DistributorOperations{})
 	readMutexSemaphore = semaphore.Init(1, 1)
 	renderingSemaphore = semaphore.Init(1, 1)
@@ -217,20 +242,21 @@ func distributor(p Params, c distributorChannels) { /*
 
 	// set the timer
 	go timer(p, &world, &turn, c.events, &isEventChannelClosed)
+	client, _ := rpc.Dial("tcp", "127.0.0.1:8030")
+	defer func(client *rpc.Client) {
+		err := client.Close()
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(2)
+		}
+	}(client)
 
-	go checkKeyPresses(p, c, world, &turn, &isEventChannelClosed, &listener)
+	go checkKeyPresses(p, c, world, &turn, &isEventChannelClosed, &listener, client)
 
 	// TODO: Execute all turns of the Game of Life.
 
 	if p.Turns > 0 {
-		client, _ := rpc.Dial("tcp", "127.0.0.1:8030")
-		defer func(client *rpc.Client) {
-			err := client.Close()
-			if err != nil {
-				fmt.Println(err)
-				os.Exit(2)
-			}
-		}(client)
+
 		callBackIP := "127.0.0.1:8080"
 		// iterate through the turns
 		req := stubs.BrokerRequest{
@@ -246,7 +272,7 @@ func distributor(p Params, c distributorChannels) { /*
 		cDone := make(chan *rpc.Call, 1)
 		_ = client.Go(stubs.BrokerCalculate, req, nil, cDone)
 
-		fmt.Println(listener)
+		//fmt.Println(listener)
 
 		go rpc.Accept(listener)
 
@@ -271,7 +297,7 @@ func distributor(p Params, c distributorChannels) { /*
 
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 	isEventChannelClosed = true
-	fmt.Println(listener, p.ImageWidth)
+	//fmt.Println(listener, p.ImageWidth)
 
 	err := listener.Close()
 	if err != nil {

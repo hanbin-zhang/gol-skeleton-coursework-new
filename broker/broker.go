@@ -6,6 +6,7 @@ import (
 	"github.com/ChrisGora/semaphore"
 	"net"
 	"net/rpc"
+	"os"
 	"uk.ac.bris.cs/gameoflife/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
 )
@@ -17,7 +18,9 @@ var (
 	nodeNumberMutex      semaphore.Semaphore
 	worldUpdateSemaphore semaphore.Semaphore
 	//world                [][]uint8
-	turn int
+	turn            int
+	shutDownChannel chan bool
+	clientMap       map[*rpc.Client]bool
 )
 
 func Append2DSliceByColumn(twoDSlice [][][]uint8) [][]uint8 {
@@ -35,22 +38,29 @@ func Append2DSliceByColumn(twoDSlice [][][]uint8) [][]uint8 {
 //The subscriber loops run asynchronously, reading from the topic and sending err
 //'job' pairs to their associated subscriber.
 func subscriberLoop(client *rpc.Client, callback string) {
+LOOP:
 	for {
-		request := <-requestChannel
-		response := new(stubs.Response)
-		err := client.Call(callback, request, response)
-		if err != nil {
-			fmt.Println("Error")
-			fmt.Println(err)
-			fmt.Println("Closing subscriber thread.")
-			nodeNumberMutex.Wait()
-			nodeNumber--
-			nodeNumberMutex.Post()
-			requestChannel <- request
-			break
+		select {
+		case req := <-requestChannel:
+			request := req
+			response := new(stubs.Response)
+			err := client.Call(callback, request, response)
+			if err != nil {
+				fmt.Println("Error")
+				fmt.Println(err)
+				fmt.Println("Closing subscriber thread.")
+				nodeNumberMutex.Wait()
+				nodeNumber--
+				delete(clientMap, client)
+				nodeNumberMutex.Post()
+				requestChannel <- request
+				break LOOP
+			}
+			responseChannel <- *response
+		case <-shutDownChannel:
+			res := new(stubs.Response)
+			client.Go(stubs.ServerShutDownHandler, stubs.Request{}, res, nil)
 		}
-
-		responseChannel <- *response
 
 	}
 }
@@ -72,8 +82,8 @@ func subscribe(nodeAddress string, callback string) (err error) {
 
 	nodeNumberMutex.Wait()
 	nodeNumber++
+	clientMap[client] = true
 	nodeNumberMutex.Post()
-
 	return
 }
 
@@ -87,13 +97,21 @@ func (b *Broker) Subscribe(req stubs.Subscription, res *stubs.StatusReport) (err
 	return err
 }
 
+func (b *Broker) ShutEveryThingDown(req stubs.Request, res *stubs.Response) (err error) {
+	for key, _ := range clientMap {
+		res1 := new(stubs.Response)
+		key.Go(stubs.ServerShutDownHandler, stubs.Request{}, res1, nil)
+	}
+	fmt.Println("Broker exiting...")
+	os.Exit(2)
+	return
+}
+
 func (b *Broker) CalculateNextState(req stubs.BrokerRequest, res *stubs.Response) (err error) {
 	world := req.World
 
 	turn = 0
-	fmt.Println(req.CallBackIP)
 
-	fmt.Println(req.Turns)
 	for t := 1; t <= req.Turns; t++ {
 		nodeNumberMutex.Wait()
 		presentNodeNumber := nodeNumber
@@ -173,8 +191,10 @@ func main() {
 	pAddr := flag.String("port", "8030", "Port to listen on")
 	flag.Parse()
 	_ = rpc.Register(&Broker{})
+	clientMap = make(map[*rpc.Client]bool)
 	requestChannel = make(chan stubs.Request)
 	responseChannel = make(chan stubs.Response)
+	shutDownChannel = make(chan bool)
 	nodeNumberMutex = semaphore.Init(1, 1)
 	worldUpdateSemaphore = semaphore.Init(1, 1)
 	listener, _ := net.Listen("tcp", ":"+*pAddr)

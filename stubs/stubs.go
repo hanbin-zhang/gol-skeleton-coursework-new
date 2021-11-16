@@ -8,6 +8,8 @@ var GolHandler = "GolOperations.CalculateCellFlipped"
 var Subscribe = "Broker.Subscribe"
 var BrokerCalculate = "Broker.CalculateNextState"
 var SDLSender = "DistributorOperations.SendToSdl"
+var ServerShutDownHandler = "GolOperations.ShutDownServer"
+var BrokerShutDownHandler = "Broker.ShutEveryThingDown"
 
 type Response struct {
 	FlippedCell []util.Cell

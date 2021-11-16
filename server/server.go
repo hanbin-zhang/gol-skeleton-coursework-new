@@ -78,6 +78,12 @@ func calculateSliceNextState(startY, endY, startX, endX, ImageHeight, ImageWidth
 	return nextSLice, flippedCell
 }
 
+func (g *GolOperations) ShutDownServer(req stubs.Request, res *stubs.Response) (err error) {
+	fmt.Println("server exiting...")
+	os.Exit(2)
+	return
+}
+
 func calculateNextState(req stubs.Request) ([][]uint8, []util.Cell) {
 	threads := req.Threads
 	world := req.World
