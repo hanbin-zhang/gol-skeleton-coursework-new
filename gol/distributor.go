@@ -24,7 +24,6 @@ type distributorChannels struct {
 
 type DistributorOperations struct{}
 
-var listener net.Listener
 var readMutexSemaphore semaphore.Semaphore
 var renderingSemaphore semaphore.Semaphore
 var turn int
@@ -63,9 +62,7 @@ func timer(p Params, currentState *[][]uint8, turns *int, eventChan chan<- Event
 // calculate all alive cells.
 func calculateAliveCells(p Params, world [][]byte) []util.Cell {
 	var list []util.Cell
-	/*fmt.Println(p)
-	fmt.Println(len(world))
-	fmt.Println(len(world[0]))*/
+
 	for n := 0; n < p.ImageHeight; n++ {
 		for i := 0; i < p.ImageWidth; i++ {
 			if world[n][i] == byte(255) {
@@ -101,7 +98,7 @@ func saveFile(c distributorChannels, p Params, world [][]uint8, turn int) {
 
 }
 
-func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int, isEventChannelClosed *bool) {
+func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int, isEventChannelClosed *bool, listener *net.Listener) {
 
 	for {
 		//fmt.Println("sas")
@@ -111,14 +108,7 @@ func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int
 			saveFile(c, p, world, *turn)
 		case 'q':
 			{
-				/*fmt.Println("aaaassss")*/
-				err := listener.Close()
-				fmt.Println(err)
-				//fmt.Println(listener)
-				if err != nil {
-					fmt.Println(err)
-					return
-				}
+
 				saveFile(c, p, world, *turn)
 				c.events <- FinalTurnComplete{CompletedTurns: p.Turns, Alive: calculateAliveCells(p, world)}
 
@@ -130,9 +120,14 @@ func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int
 
 				// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 				*isEventChannelClosed = true
-
+				l := *listener
+				err := l.Close()
+				if err != nil {
+					fmt.Println(err)
+					return
+				}
 				close(c.events)
-				os.Exit(2)
+				//os.Exit(2)
 			}
 		case 'p':
 			renderingSemaphore.Wait()
@@ -156,7 +151,6 @@ func (d *DistributorOperations) SendToSdl(req stubs.SDLRequest, res *stubs.Statu
 	readMutexSemaphore.Wait()
 	//a parallel way to calculate all cells flipped
 	//fmt.Println(flipped)
-	//fmt.Println(req.FlippedCell)
 	turn = req.Turn
 	for _, cell := range flipped {
 		channels.events <- CellFlipped{
@@ -187,10 +181,8 @@ func distributor(p Params, c distributorChannels) { /*
 				break
 			}
 		}*/
-	listener, _ = net.Listen("tcp", "127.0.0.1:8080")
-
-	server := rpc.NewServer()
-	server.Register(&DistributorOperations{})
+	listener, errL := net.Listen("tcp", "127.0.0.1:8080")
+	fmt.Println(errL)
 	_ = rpc.Register(&DistributorOperations{})
 	readMutexSemaphore = semaphore.Init(1, 1)
 	renderingSemaphore = semaphore.Init(1, 1)
@@ -226,19 +218,19 @@ func distributor(p Params, c distributorChannels) { /*
 	// set the timer
 	go timer(p, &world, &turn, c.events, &isEventChannelClosed)
 
-	go checkKeyPresses(p, c, world, &turn, &isEventChannelClosed)
+	go checkKeyPresses(p, c, world, &turn, &isEventChannelClosed, &listener)
 
 	// TODO: Execute all turns of the Game of Life.
 
 	if p.Turns > 0 {
 		client, _ := rpc.Dial("tcp", "127.0.0.1:8030")
-		/*defer func(client *rpc.Client) {
+		defer func(client *rpc.Client) {
 			err := client.Close()
 			if err != nil {
 				fmt.Println(err)
 				os.Exit(2)
 			}
-		}(client)*/
+		}(client)
 		callBackIP := "127.0.0.1:8080"
 		// iterate through the turns
 		req := stubs.BrokerRequest{
@@ -254,9 +246,9 @@ func distributor(p Params, c distributorChannels) { /*
 		cDone := make(chan *rpc.Call, 1)
 		_ = client.Go(stubs.BrokerCalculate, req, nil, cDone)
 
-		//fmt.Println(listener)
+		fmt.Println(listener)
 
-		go server.Accept(listener)
+		go rpc.Accept(listener)
 
 		for i := 1; i <= p.Turns; i++ {
 			<-turnComplete
@@ -279,10 +271,9 @@ func distributor(p Params, c distributorChannels) { /*
 
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 	isEventChannelClosed = true
-	//fmt.Println(listener, p.ImageWidth)
+	fmt.Println(listener, p.ImageWidth)
 
 	err := listener.Close()
-
 	if err != nil {
 		return
 	}

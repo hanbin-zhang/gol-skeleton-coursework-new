@@ -162,7 +162,6 @@ func (b *Broker) CalculateNextState(req stubs.BrokerRequest, res *stubs.Response
 		err = client.Call(stubs.SDLSender, SDLRequest, SDLRes)
 		if err != nil {
 			fmt.Println(err)
-			client.Close()
 			break
 		}
 		client.Close()
@@ -185,8 +184,6 @@ func main() {
 			fmt.Println(err)
 		}
 	}(listener)
-	server := rpc.NewServer()
-	server.Register(&Broker{})
 	fmt.Println("Port :listen on:", *pAddr)
-	server.Accept(listener)
+	rpc.Accept(listener)
 }
