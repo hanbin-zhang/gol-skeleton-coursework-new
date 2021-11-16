@@ -8,8 +8,6 @@ var GolHandler = "GolOperations.CalculateCellFlipped"
 var Subscribe = "Broker.Subscribe"
 var BrokerCalculate = "Broker.CalculateNextState"
 var SDLSender = "DistributorOperations.SendToSdl"
-var CellFLippedHandler = "Broker.RequestCellFlipped"
-var RefreshHandler = "Broker.RefreshChan"
 
 type Response struct {
 	FlippedCell []util.Cell
@@ -18,7 +16,6 @@ type Response struct {
 }
 
 type Request struct {
-	Key         string
 	Threads     int
 	SliceNumber int
 	ImageWidth  int
@@ -37,7 +34,6 @@ type BrokerRequest struct {
 	ImageHeight int
 	World       [][]uint8
 	CallBackIP  string
-	Key         string
 }
 
 type Subscription struct {
@@ -52,8 +48,4 @@ type StatusReport struct {
 type SDLRequest struct {
 	FlippedCell []util.Cell
 	Turn        int
-}
-type CellFlippedRequest struct {
-	CloseFlag bool
-	Key       string
 }
