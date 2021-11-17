@@ -111,7 +111,7 @@ func (b *Broker) CalculateNextState(req stubs.BrokerRequest, res *stubs.Response
 	world := req.World
 
 	turn = 0
-
+	client, _ := rpc.Dial("tcp", req.CallBackIP)
 	for t := 1; t <= req.Turns; t++ {
 		nodeNumberMutex.Wait()
 		presentNodeNumber := nodeNumber
@@ -176,14 +176,17 @@ func (b *Broker) CalculateNextState(req stubs.BrokerRequest, res *stubs.Response
 		worldUpdateSemaphore.Post()
 		SDLRequest := stubs.SDLRequest{FlippedCell: flipped, Turn: t}
 		SDLRes := new(stubs.StatusReport)
-		client, _ := rpc.Dial("tcp", req.CallBackIP)
+
 		err = client.Call(stubs.SDLSender, SDLRequest, SDLRes)
 		if err != nil {
+			client.Close()
 			fmt.Println(err)
+
 			break
 		}
-		client.Close()
+
 	}
+	client.Close()
 	return
 }
 
