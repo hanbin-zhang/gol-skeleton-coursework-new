@@ -84,7 +84,7 @@ func (g *GolOperations) ShutDownServer(req stubs.Request, res *stubs.Response) (
 	return
 }
 
-func calculateNextState(req stubs.Request) ([][]uint8, []util.Cell) {
+func calculateNextState(req stubs.Request) []util.Cell {
 	threads := req.Threads
 	world := req.World
 	data := MakeImmutableMatrix(world)
@@ -120,15 +120,14 @@ func calculateNextState(req stubs.Request) ([][]uint8, []util.Cell) {
 			flipped = append(flipped, flippedPart...)
 		}
 	}
-	return newPixelData, flipped
+	return flipped
 }
 
 func (g *GolOperations) CalculateCellFlipped(req stubs.Request, res *stubs.Response) (err error) {
 
 	// iterate through the cells
-	nextWorld, flippedCell := calculateNextState(req)
+	flippedCell := calculateNextState(req)
 
-	res.NewWorld = nextWorld
 	res.FlippedCell = flippedCell
 	res.SliceNumber = req.SliceNumber
 	return

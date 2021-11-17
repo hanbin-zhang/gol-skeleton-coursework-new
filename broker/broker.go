@@ -111,7 +111,7 @@ func (b *Broker) CalculateNextState(req stubs.BrokerRequest, res *stubs.Response
 	world := req.World
 
 	turn = 0
-
+	client, _ := rpc.Dial("tcp", req.CallBackIP)
 	for t := 1; t <= req.Turns; t++ {
 		nodeNumberMutex.Wait()
 		presentNodeNumber := nodeNumber
@@ -156,34 +156,41 @@ func (b *Broker) CalculateNextState(req stubs.BrokerRequest, res *stubs.Response
 
 			requestChannel <- lastNodeRequest
 		}
-		var nextWorld [][]uint8
 		var flipped []util.Cell
-		SliceOf2DSlice := make([][][]uint8, presentNodeNumber)
+		//SliceOf2DSlice := make([][][]uint8, presentNodeNumber)
 
 		for n := 0; n < presentNodeNumber; n++ {
 
 			response := <-responseChannel
-			SliceOf2DSlice[response.SliceNumber] = response.NewWorld
+			//SliceOf2DSlice[response.SliceNumber] = response.NewWorld
 			flipped = append(flipped, response.FlippedCell...)
 		}
 
 		//fmt.Println(SliceOf2DSlice)
-		nextWorld = Append2DSliceByColumn(SliceOf2DSlice)
+		//nextWorld = Append2DSliceByColumn(SliceOf2DSlice)
 
-		worldUpdateSemaphore.Wait()
-		turn++
-		world = nextWorld
-		worldUpdateSemaphore.Post()
 		SDLRequest := stubs.SDLRequest{FlippedCell: flipped, Turn: t}
 		SDLRes := new(stubs.StatusReport)
-		client, _ := rpc.Dial("tcp", req.CallBackIP)
+
 		err = client.Call(stubs.SDLSender, SDLRequest, SDLRes)
 		if err != nil {
 			fmt.Println(err)
+			client.Close()
 			break
 		}
-		client.Close()
+		worldUpdateSemaphore.Wait()
+		turn++
+		for _, cell := range flipped {
+			if world[cell.Y][cell.X] == 255 {
+				world[cell.Y][cell.X] = 0
+			} else if world[cell.Y][cell.X] == 0 {
+				world[cell.Y][cell.X] = 255
+			}
+		}
+		worldUpdateSemaphore.Post()
+
 	}
+	client.Close()
 	return
 }
 

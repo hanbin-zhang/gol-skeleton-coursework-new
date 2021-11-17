@@ -1,7 +1,6 @@
 package gol
 
 import (
-	"fmt"
 	"github.com/ChrisGora/semaphore"
 	"net"
 	"net/rpc"
@@ -123,7 +122,7 @@ func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int
 				l := *listener
 				err := l.Close()
 				if err != nil {
-					fmt.Println(err)
+					//fmt.Println(err)
 					return
 				}
 				close(c.events)
@@ -159,7 +158,7 @@ func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int
 			l := *listener
 			err := l.Close()
 			if err != nil {
-				fmt.Println(err)
+				//fmt.Println(err)
 				return
 			}
 			close(c.events)
@@ -206,6 +205,7 @@ func distributor(p Params, c distributorChannels) { /*
 				break
 			}
 		}*/
+
 	listener, _ := net.Listen("tcp", "127.0.0.1:8080")
 	//fmt.Println(errL)
 	_ = rpc.Register(&DistributorOperations{})
@@ -246,7 +246,7 @@ func distributor(p Params, c distributorChannels) { /*
 	defer func(client *rpc.Client) {
 		err := client.Close()
 		if err != nil {
-			fmt.Println(err)
+			//fmt.Println(err)
 			os.Exit(2)
 		}
 	}(client)
