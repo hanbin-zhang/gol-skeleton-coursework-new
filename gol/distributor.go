@@ -189,6 +189,23 @@ func ipGenerator(p Params) (string, string, string) {
 	return broker, localIP, localPort
 }
 
+func initializeWorld(c distributorChannels, p Params) [][]uint8 {
+	// let io start input
+	c.ioCommand <- ioInput
+	// HANBIN: send to the io goroutine the file name specified by the width and height
+	filename := strconv.Itoa(p.ImageHeight) + "x" + strconv.Itoa(p.ImageWidth)
+	c.ioFilename <- filename
+
+	// TODO: Create a 2D slice to store the world.
+	world = MakeNewWorld(p.ImageHeight, p.ImageWidth)
+	for h := 0; h < p.ImageHeight; h++ {
+		for w := 0; w < p.ImageWidth; w++ {
+			world[h][w] = <-c.ioInput
+		}
+	}
+	return world
+}
+
 func quitProgram(c distributorChannels, p Params, listener net.Listener, isEventChannelClosed *bool) {
 	c.events <- FinalTurnComplete{CompletedTurns: p.Turns, Alive: calculateAliveCells(p, world)}
 
@@ -208,56 +225,7 @@ func quitProgram(c distributorChannels, p Params, listener net.Listener, isEvent
 	close(c.events)
 }
 
-// distributor divides the work between workers and interacts with other goroutines.
-func distributor(p Params, c distributorChannels) {
-	broker, IP, port := ipGenerator(p)
-
-	listener, _ := net.Listen("tcp", ":"+port)
-	_ = rpc.Register(&DistributorOperations{})
-	readMutexSemaphore = semaphore.Init(1, 1)
-	renderingSemaphore = semaphore.Init(1, 1)
-	turnComplete = make(chan bool)
-	channels = c
-
-	isEventChannelClosed := false
-	// let io start input
-	c.ioCommand <- ioInput
-	// HANBIN: send to the io goroutine the file name specified by the width and height
-	filename := strconv.Itoa(p.ImageHeight) + "x" + strconv.Itoa(p.ImageWidth)
-	c.ioFilename <- filename
-
-	// TODO: Create a 2D slice to store the world.
-	world = MakeNewWorld(p.ImageHeight, p.ImageWidth)
-	for h := 0; h < p.ImageHeight; h++ {
-		for w := 0; w < p.ImageWidth; w++ {
-			world[h][w] = <-c.ioInput
-		}
-	}
-
-	turn = 0
-
-	for _, cell := range calculateAliveCells(p, world) {
-		c.events <- CellFlipped{
-			CompletedTurns: turn,
-			Cell:           cell,
-		}
-	}
-
-	// set the timer
-	go timer(p, &world, &turn, c.events, &isEventChannelClosed)
-	client, _ := rpc.Dial("tcp", broker)
-	defer func(client *rpc.Client) {
-		err := client.Close()
-		if err != nil {
-			//fmt.Println(err)
-			os.Exit(2)
-		}
-	}(client)
-
-	go checkKeyPresses(p, c, world, &turn, &isEventChannelClosed, &listener, client)
-
-	// TODO: Execute all turns of the Game of Life.
-
+func runThroughTurns(client *rpc.Client, p Params, IP, port string, listener net.Listener) {
 	if p.Turns > 0 {
 
 		callBackIP := IP + ":" + port
@@ -281,6 +249,49 @@ func distributor(p Params, c distributorChannels) {
 		}
 		<-cDone
 	}
+}
+
+// distributor divides the work between workers and interacts with other goroutines.
+func distributor(p Params, c distributorChannels) {
+	broker, IP, port := ipGenerator(p)
+
+	listener, _ := net.Listen("tcp", ":"+port)
+	_ = rpc.Register(&DistributorOperations{})
+	readMutexSemaphore = semaphore.Init(1, 1)
+	renderingSemaphore = semaphore.Init(1, 1)
+	turnComplete = make(chan bool)
+	channels = c
+
+	isEventChannelClosed := false
+
+	world = initializeWorld(c, p)
+
+	turn = 0
+
+	for _, cell := range calculateAliveCells(p, world) {
+		c.events <- CellFlipped{
+			CompletedTurns: turn,
+			Cell:           cell,
+		}
+	}
+
+	// set the timer
+	go timer(p, &world, &turn, c.events, &isEventChannelClosed)
+
+	client, _ := rpc.Dial("tcp", broker)
+	defer func(client *rpc.Client) {
+		err := client.Close()
+		if err != nil {
+			//fmt.Println(err)
+			os.Exit(2)
+		}
+	}(client)
+
+	go checkKeyPresses(p, c, world, &turn, &isEventChannelClosed, &listener, client)
+
+	// TODO: Execute all turns of the Game of Life.
+
+	runThroughTurns(client, p, IP, port, listener)
 
 	saveFile(c, p, world, p.Turns)
 
