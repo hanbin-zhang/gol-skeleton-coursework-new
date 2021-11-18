@@ -109,24 +109,7 @@ func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int
 			{
 
 				saveFile(c, p, world, *turn)
-				c.events <- FinalTurnComplete{CompletedTurns: p.Turns, Alive: calculateAliveCells(p, world)}
-
-				// Make sure that the Io has finished any output before exiting.
-				c.ioCommand <- ioCheckIdle
-				<-c.ioIdle
-
-				c.events <- StateChange{*turn, Quitting}
-
-				// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
-				*isEventChannelClosed = true
-				l := *listener
-				err := l.Close()
-				if err != nil {
-					//fmt.Println(err)
-					return
-				}
-				close(c.events)
-				os.Exit(2)
+				quitProgram(c, p, *listener, isEventChannelClosed)
 			}
 		case 'p':
 			renderingSemaphore.Wait()
@@ -145,22 +128,7 @@ func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int
 			client.Go(stubs.BrokerShutDownHandler, stubs.Request{}, res, nil)
 			readMutexSemaphore.Post()
 			saveFile(c, p, world, *turn)
-			c.events <- FinalTurnComplete{CompletedTurns: p.Turns, Alive: calculateAliveCells(p, world)}
-
-			// Make sure that the Io has finished any output before exiting.
-			c.ioCommand <- ioCheckIdle
-			<-c.ioIdle
-
-			c.events <- StateChange{*turn, Quitting}
-
-			// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
-			*isEventChannelClosed = true
-			l := *listener
-			err := l.Close()
-			if err != nil {
-				//fmt.Println(err)
-				return
-			}
+			quitProgram(c, p, *listener, isEventChannelClosed)
 			close(c.events)
 			os.Exit(2)
 		}
@@ -173,8 +141,8 @@ func (d *DistributorOperations) SendToSdl(req stubs.SDLRequest, res *stubs.Statu
 
 	renderingSemaphore.Wait()
 	readMutexSemaphore.Wait()
+
 	//a parallel way to calculate all cells flipped
-	//fmt.Println(flipped)
 	turn = req.Turn
 	for _, cell := range flipped {
 		channels.events <- CellFlipped{
@@ -221,20 +189,30 @@ func ipGenerator(p Params) (string, string, string) {
 	return broker, localIP, localPort
 }
 
+func quitProgram(c distributorChannels, p Params, listener net.Listener, isEventChannelClosed *bool) {
+	c.events <- FinalTurnComplete{CompletedTurns: p.Turns, Alive: calculateAliveCells(p, world)}
+
+	// Make sure that the Io has finished any output before exiting.
+	c.ioCommand <- ioCheckIdle
+	<-c.ioIdle
+
+	c.events <- StateChange{turn, Quitting}
+
+	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
+	*isEventChannelClosed = true
+
+	err := listener.Close()
+	if err != nil {
+		return
+	}
+	close(c.events)
+}
+
 // distributor divides the work between workers and interacts with other goroutines.
-func distributor(p Params, c distributorChannels) { /*
-		for  {
-			listener, errL := net.Listen("tcp", "127.0.0.1:8080")
-			fmt.Println(errL)
-			if errL==nil {
-				listener.Close()
-				break
-			}
-		}*/
+func distributor(p Params, c distributorChannels) {
 	broker, IP, port := ipGenerator(p)
 
 	listener, _ := net.Listen("tcp", ":"+port)
-	//fmt.Println(errL)
 	_ = rpc.Register(&DistributorOperations{})
 	readMutexSemaphore = semaphore.Init(1, 1)
 	renderingSemaphore = semaphore.Init(1, 1)
@@ -258,14 +236,12 @@ func distributor(p Params, c distributorChannels) { /*
 
 	turn = 0
 
-	//fmt.Println(calculateAliveCells(p, world))
 	for _, cell := range calculateAliveCells(p, world) {
 		c.events <- CellFlipped{
 			CompletedTurns: turn,
 			Cell:           cell,
 		}
 	}
-	//c.events <- TurnComplete{CompletedTurns: turn}
 
 	// set the timer
 	go timer(p, &world, &turn, c.events, &isEventChannelClosed)
@@ -295,11 +271,8 @@ func distributor(p Params, c distributorChannels) { /*
 			CallBackIP:  callBackIP,
 		}
 
-		//res := new(stubs.Response)
 		cDone := make(chan *rpc.Call, 1)
 		_ = client.Go(stubs.BrokerCalculate, req, nil, cDone)
-
-		//fmt.Println(listener)
 
 		go rpc.Accept(listener)
 
@@ -311,25 +284,6 @@ func distributor(p Params, c distributorChannels) { /*
 
 	saveFile(c, p, world, p.Turns)
 
-	// TODO: output proceeded map IO
-	// TODO: Report the final state using FinalTurnCompleteEvent.
+	quitProgram(c, p, listener, &isEventChannelClosed)
 
-	c.events <- FinalTurnComplete{CompletedTurns: p.Turns, Alive: calculateAliveCells(p, world)}
-
-	// Make sure that the Io has finished any output before exiting.
-	c.ioCommand <- ioCheckIdle
-	<-c.ioIdle
-
-	c.events <- StateChange{turn, Quitting}
-
-	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
-	isEventChannelClosed = true
-	//fmt.Println(listener, p.ImageWidth)
-
-	err := listener.Close()
-	if err != nil {
-		return
-	}
-	close(c.events)
-	//os.Exit(2)
 }
