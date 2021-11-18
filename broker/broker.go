@@ -141,6 +141,22 @@ func sendRequest(req stubs.BrokerRequest, presentNodeNumber int, world [][]uint8
 	requestChannel <- lastNodeRequest
 }
 
+func getNodeNumber() int {
+	var presentNodeNumber int
+
+	for {
+		nodeNumberMutex.Wait()
+		presentNodeNumber = nodeNumber
+		nodeNumberMutex.Post()
+		if nodeNumber == 0 {
+			ignitionSemaphore.Wait()
+		} else {
+			break
+		}
+	}
+	return presentNodeNumber
+}
+
 func (b *Broker) CalculateNextState(req stubs.BrokerRequest, res *stubs.Response) (err error) {
 	world := req.World
 
@@ -148,34 +164,16 @@ func (b *Broker) CalculateNextState(req stubs.BrokerRequest, res *stubs.Response
 	client, _ := rpc.Dial("tcp", req.CallBackIP)
 
 	for t := 1; t <= req.Turns; t++ {
-		var presentNodeNumber int
-
-		for {
-			nodeNumberMutex.Wait()
-			presentNodeNumber = nodeNumber
-			nodeNumberMutex.Post()
-			if nodeNumber == 0 {
-				ignitionSemaphore.Wait()
-			} else {
-				break
-			}
-		}
+		presentNodeNumber := getNodeNumber()
 
 		sendRequest(req, presentNodeNumber, world)
 
-		//var nextWorld [][]uint8
 		var flipped []util.Cell
-		//SliceOf2DSlice := make([][][]uint8, presentNodeNumber)
 
 		for n := 0; n < presentNodeNumber; n++ {
-
 			response := <-responseChannel
-			//SliceOf2DSlice[response.SliceNumber] = response.NewWorld
 			flipped = append(flipped, response.FlippedCell...)
 		}
-
-		//fmt.Println(SliceOf2DSlice)
-		//nextWorld = Append2DSliceByColumn(SliceOf2DSlice)
 
 		SDLRequest := stubs.SDLRequest{FlippedCell: flipped, Turn: t}
 		SDLRes := new(stubs.StatusReport)

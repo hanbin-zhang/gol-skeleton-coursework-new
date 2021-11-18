@@ -195,6 +195,32 @@ func (d *DistributorOperations) SendToSdl(req stubs.SDLRequest, res *stubs.Statu
 	return
 }
 
+// completely made for tests since tests do not run the main thus I can not obtain those data by flags
+func ipGenerator(p Params) (string, string, string) {
+	var broker string
+	var localIP string
+	var localPort string
+	if p.Broker == "" {
+		broker = "127.0.0.1:8030"
+	} else {
+		broker = p.Broker
+	}
+
+	if p.LocalIP == "" {
+		localIP = "127.0.0.1"
+	} else {
+		localIP = p.LocalIP
+	}
+
+	if p.LocalPort == "" {
+		localPort = "8080"
+	} else {
+		localPort = p.LocalPort
+	}
+
+	return broker, localIP, localPort
+}
+
 // distributor divides the work between workers and interacts with other goroutines.
 func distributor(p Params, c distributorChannels) { /*
 		for  {
@@ -205,8 +231,9 @@ func distributor(p Params, c distributorChannels) { /*
 				break
 			}
 		}*/
+	broker, IP, port := ipGenerator(p)
 
-	listener, _ := net.Listen("tcp", "127.0.0.1:8080")
+	listener, _ := net.Listen("tcp", ":"+port)
 	//fmt.Println(errL)
 	_ = rpc.Register(&DistributorOperations{})
 	readMutexSemaphore = semaphore.Init(1, 1)
@@ -242,7 +269,7 @@ func distributor(p Params, c distributorChannels) { /*
 
 	// set the timer
 	go timer(p, &world, &turn, c.events, &isEventChannelClosed)
-	client, _ := rpc.Dial("tcp", "127.0.0.1:8030")
+	client, _ := rpc.Dial("tcp", broker)
 	defer func(client *rpc.Client) {
 		err := client.Close()
 		if err != nil {
@@ -257,7 +284,7 @@ func distributor(p Params, c distributorChannels) { /*
 
 	if p.Turns > 0 {
 
-		callBackIP := "127.0.0.1:8080"
+		callBackIP := IP + ":" + port
 		// iterate through the turns
 		req := stubs.BrokerRequest{
 			Turns:       p.Turns,
