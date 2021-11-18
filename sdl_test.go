@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"runtime"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ var sdlEvents chan gol.Event
 var sdlAlive chan int
 
 func TestMain(m *testing.M) {
+	runtime.LockOSThread()
 	noVis := flag.Bool("noVis", false,
 		"Disables the SDL window, so there is no visualisation during the tests.")
 	flag.Parse()
@@ -23,15 +25,14 @@ func TestMain(m *testing.M) {
 	sdlAlive = make(chan int)
 	result := make(chan int)
 	go func() {
-		result <- m.Run()
+		res := m.Run()
+		go func() {
+			sdlEvents <- gol.FinalTurnComplete{}
+		}()
+		result <- res
 	}()
-	/*res := m.Run()
-	go func() {
-		sdlEvents <- gol.FinalTurnComplete{}
-	}()
-	result <- res*/
+	// sdl.Run(p, sdlEvents, nil)
 	var w *sdl.Window = nil
-	fmt.Println(*noVis)
 	if !(*noVis) {
 		w = sdl.NewWindow(int32(p.ImageWidth), int32(p.ImageHeight))
 	}
