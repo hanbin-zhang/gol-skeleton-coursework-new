@@ -17,6 +17,7 @@ var (
 	nodeNumber           int
 	nodeNumberMutex      semaphore.Semaphore
 	worldUpdateSemaphore semaphore.Semaphore
+	ignitionSemaphore    semaphore.Semaphore
 	//world                [][]uint8
 	turn            int
 	shutDownChannel chan bool
@@ -51,6 +52,9 @@ LOOP:
 				fmt.Println("Closing subscriber thread.")
 				nodeNumberMutex.Wait()
 				nodeNumber--
+				if nodeNumber == 0 {
+					ignitionSemaphore.Wait()
+				}
 				delete(clientMap, client)
 				nodeNumberMutex.Post()
 				requestChannel <- request
@@ -82,6 +86,9 @@ func subscribe(nodeAddress string, callback string) (err error) {
 
 	nodeNumberMutex.Wait()
 	nodeNumber++
+	if ignitionSemaphore.GetValue() < 1 {
+		ignitionSemaphore.Post()
+	}
 	clientMap[client] = true
 	nodeNumberMutex.Post()
 	return
@@ -116,6 +123,18 @@ func (b *Broker) CalculateNextState(req stubs.BrokerRequest, res *stubs.Response
 		nodeNumberMutex.Wait()
 		presentNodeNumber := nodeNumber
 		nodeNumberMutex.Post()
+
+		for {
+			nodeNumberMutex.Wait()
+			presentNodeNumber = nodeNumber
+			nodeNumberMutex.Post()
+			if nodeNumber == 0 {
+				ignitionSemaphore.Wait()
+			} else {
+				break
+			}
+		}
+
 		if presentNodeNumber == 1 {
 			nodeRequest := stubs.Request{Threads: req.Threads,
 				SliceNumber: 0,
@@ -194,6 +213,7 @@ func main() {
 	pAddr := flag.String("port", "8030", "Port to listen on")
 	flag.Parse()
 	_ = rpc.Register(&Broker{})
+	ignitionSemaphore = semaphore.Init(1, 0)
 	clientMap = make(map[*rpc.Client]bool)
 	requestChannel = make(chan stubs.Request)
 	responseChannel = make(chan stubs.Response)
