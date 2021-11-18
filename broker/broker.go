@@ -24,7 +24,7 @@ var (
 	clientMap       map[*rpc.Client]bool
 )
 
-func Append2DSliceByColumn(twoDSlice [][][]uint8) [][]uint8 {
+/*func Append2DSliceByColumn(twoDSlice [][][]uint8) [][]uint8 {
 	newWorld := twoDSlice[0]
 	for i := 1; i < len(twoDSlice); i++ {
 		part := twoDSlice[i]
@@ -34,7 +34,7 @@ func Append2DSliceByColumn(twoDSlice [][][]uint8) [][]uint8 {
 	}
 
 	return newWorld
-}
+}*/
 
 //The subscriber loops run asynchronously, reading from the topic and sending err
 //'job' pairs to their associated subscriber.
@@ -105,7 +105,7 @@ func (b *Broker) Subscribe(req stubs.Subscription, res *stubs.StatusReport) (err
 }
 
 func (b *Broker) ShutEveryThingDown(req stubs.Request, res *stubs.Response) (err error) {
-	for key, _ := range clientMap {
+	for key := range clientMap {
 		res1 := new(stubs.Response)
 		key.Go(stubs.ServerShutDownHandler, stubs.Request{}, res1, nil)
 	}
@@ -183,7 +183,7 @@ func (b *Broker) CalculateNextState(req stubs.BrokerRequest, res *stubs.Response
 		err = client.Call(stubs.SDLSender, SDLRequest, SDLRes)
 		if err != nil {
 			fmt.Println(err)
-			client.Close()
+			_ = client.Close()
 			break
 		}
 		worldUpdateSemaphore.Wait()
@@ -198,7 +198,7 @@ func (b *Broker) CalculateNextState(req stubs.BrokerRequest, res *stubs.Response
 		worldUpdateSemaphore.Post()
 
 	}
-	client.Close()
+	_ = client.Close()
 	return
 }
 
