@@ -24,18 +24,6 @@ var (
 	clientMap       map[*rpc.Client]bool
 )
 
-/*func Append2DSliceByColumn(twoDSlice [][][]uint8) [][]uint8 {
-	newWorld := twoDSlice[0]
-	for i := 1; i < len(twoDSlice); i++ {
-		part := twoDSlice[i]
-		for j := 0; j < len(newWorld); j++ {
-			newWorld[j] = append(newWorld[j], part[j]...)
-		}
-	}
-
-	return newWorld
-}*/
-
 //The subscriber loops run asynchronously, reading from the topic and sending err
 //'job' pairs to their associated subscriber.
 func subscriberLoop(client *rpc.Client, callback string) {
