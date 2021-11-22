@@ -65,7 +65,7 @@ func BenchmarkCalculateNextState(b *testing.B) {
 	for n := 1; n <= 16; n++ {
 		b.Run(fmt.Sprintf("%d_threads", n), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				gol.CalculateNextState(world, gol.Params{Turns: 100, ImageWidth: 512, Threads: n, ImageHeight: 512})
+				gol.CalculateNextState(world, gol.Params{Turns: 1000, ImageWidth: 512, Threads: n, ImageHeight: 512})
 			}
 		})
 	}
