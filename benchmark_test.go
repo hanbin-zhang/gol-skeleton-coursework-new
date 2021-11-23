@@ -3,11 +3,13 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
+	"net/rpc"
 	"os"
 	"strconv"
 	"strings"
 	"testing"
 	"uk.ac.bris.cs/gameoflife/gol"
+	"uk.ac.bris.cs/gameoflife/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
 )
 
@@ -62,10 +64,28 @@ func BenchmarkCalculateNextState(b *testing.B) {
 			world[h][w] = <-input
 		}
 	}
+	client, _ := rpc.Dial("tcp", "127.0.0.1:8030")
+	defer func(client *rpc.Client) {
+		err := client.Close()
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(2)
+		}
+	}(client)
 	for n := 1; n <= 16; n++ {
 		b.Run(fmt.Sprintf("%d_threads", n), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				gol.CalculateNextState(world, gol.Params{Turns: 1000, ImageWidth: 512, Threads: n, ImageHeight: 512})
+				req := stubs.BrokerRequest{
+					Threads:     n,
+					ImageWidth:  512,
+					ImageHeight: 512,
+					World:       world,
+					Turns:       1000,
+				}
+
+				res := new(stubs.Response)
+
+				_ = client.Call(stubs.BrokerCalculate, req, res)
 			}
 		})
 	}
