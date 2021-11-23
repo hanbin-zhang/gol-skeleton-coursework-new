@@ -234,10 +234,7 @@ func CalculateNextState(world [][]uint8, p Params) ([][]uint8, []util.Cell) {
 			part := <-c
 			workerChannelsl[part.id] = part
 		}
-		for i := 0; i < p.Threads; i++ {
-			newPixelData = append(newPixelData, workerChannelsl[i].worldSlice...)
-			flipped = append(flipped, workerChannelsl[i].flippedCell...)
-		}
+
 	}
 	return newPixelData, flipped
 }
