@@ -62,6 +62,7 @@ func BenchmarkCalculateNextState(b *testing.B) {
 			world[h][w] = <-input
 		}
 	}
+
 	for n := 1; n <= 16; n++ {
 		b.Run(fmt.Sprintf("%d_threads", n), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
