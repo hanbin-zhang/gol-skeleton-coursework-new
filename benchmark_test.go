@@ -81,7 +81,7 @@ func Benchmark(b *testing.B) {
 		{ImageWidth: 512, ImageHeight: 512},
 	}
 	for _, p := range tests {
-		for _, turns := range []int{100} {
+		for _, turns := range []int{1000} {
 			p.Turns = turns
 
 			for threads := 1; threads <= 16; threads++ {
@@ -100,5 +100,6 @@ func Benchmark(b *testing.B) {
 				})
 			}
 		}
+		// os.Exit(2)
 	}
 }
