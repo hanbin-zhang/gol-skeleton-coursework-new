@@ -87,7 +87,6 @@ func saveFile(c distributorChannels, p Params, world [][]uint8, turn int) {
 	//realReadMutex.Unlock()
 	readMutexSemaphore.Post()
 	//fmt.Println(world)
-
 	if len(world) == 0 {
 		return
 	}
