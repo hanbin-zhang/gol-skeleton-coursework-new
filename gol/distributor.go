@@ -8,8 +8,9 @@ import (
 )
 
 type workerChannels struct {
-	worldSlice  chan [][]uint8
-	flippedCell chan []util.Cell
+	worldSlice  [][]uint8
+	flippedCell []util.Cell
+	id          int
 }
 
 type distributorChannels struct {
@@ -99,10 +100,9 @@ func saveFile(c distributorChannels, p Params, world [][]uint8, turn int) {
 
 }
 
-func worker(startY, endY, startX, endX int, data func(y, x int) uint8, out workerChannels, p Params) {
+func worker(startY, endY, startX, endX int, data func(y, x int) uint8, out chan workerChannels, p Params, id int) {
 	work, workFlipped := calculateSliceNextState(startY, endY, startX, endX, data, p)
-	out.worldSlice <- work
-	out.flippedCell <- workFlipped
+	out <- workerChannels{flippedCell: workFlipped, worldSlice: work, id: id}
 }
 
 func calculateSliceNextState(startY, endY, startX, endX int, data func(y, x int) uint8, p Params) ([][]uint8, []util.Cell) {
@@ -201,29 +201,27 @@ func CalculateNextState(world [][]uint8, p Params) ([][]uint8, []util.Cell) {
 	if p.Threads == 1 {
 		newPixelData, flipped = calculateSliceNextState(0, p.ImageHeight, 0, p.ImageWidth, data, p)
 	} else {
-		ChanSlice := make([]workerChannels, p.Threads)
+		c := make(chan workerChannels)
 
-		for i := 0; i < p.Threads; i++ {
-			ChanSlice[i].worldSlice = make(chan [][]uint8)
-			ChanSlice[i].flippedCell = make(chan []util.Cell)
-		}
 		for i := 0; i < p.Threads-1; i++ {
 			go worker(int(float32(p.ImageHeight)*(float32(i)/float32(p.Threads))),
 				int(float32(p.ImageHeight)*(float32(i+1)/float32(p.Threads))),
-				0, p.ImageWidth, data, ChanSlice[i], p)
+				0, p.ImageWidth, data, c, p, i)
 		}
 		go worker(int(float32(p.ImageHeight)*(float32(p.Threads-1)/float32(p.Threads))),
 			p.ImageHeight,
-			0, p.ImageWidth, data, ChanSlice[p.Threads-1], p)
+			0, p.ImageWidth, data, c, p, p.Threads-1)
 
 		makeImmutableMatrix(newPixelData)
+		workerChannelsl := make([]workerChannels, p.Threads)
 		for i := 0; i < p.Threads; i++ {
 
-			part := <-ChanSlice[i].worldSlice
-			newPixelData = append(newPixelData, part...)
-
-			flippedPart := <-ChanSlice[i].flippedCell
-			flipped = append(flipped, flippedPart...)
+			part := <-c
+			workerChannelsl[part.id] = part
+		}
+		for i := 0; i < p.Threads; i++ {
+			newPixelData = append(newPixelData, workerChannelsl[i].worldSlice...)
+			flipped = append(flipped, workerChannelsl[i].flippedCell...)
 		}
 	}
 	return newPixelData, flipped
