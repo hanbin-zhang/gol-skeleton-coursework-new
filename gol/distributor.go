@@ -87,6 +87,7 @@ func saveFile(c distributorChannels, p Params, world [][]uint8, turn int) {
 	//realReadMutex.Unlock()
 	readMutexSemaphore.Post()
 	//fmt.Println(world)
+
 	if len(world) == 0 {
 		return
 	}
@@ -117,6 +118,22 @@ func calculateSliceNextState(startY, endY, startX, endX int, data func(y, x int)
 				for _, k := range [3]int{i - 1, i, i + 1} {
 					newK := (k - p.ImageHeight) % p.ImageHeight
 					newL := (l - p.ImageWidth) % p.ImageWidth
+					/////////var newK int
+					/////////var newL int
+					//if k >= p.ImageHeight {
+					//newK = k - p.ImageHeight
+					//} else if k < 0 {
+					//	newK = k + p.ImageHeight
+					//} else {
+					//	newK = k
+					//}
+					//if l >= p.ImageWidth {
+					//	newL = l - p.ImageWidth
+					//} else if l < 0 {
+					//	newL = l + p.ImageWidth
+					//} else {
+					//	newL = l
+					//}
 
 					if data(newK, newL) == 255 {
 						numberLive++
@@ -282,6 +299,22 @@ func distributor(p Params, c distributorChannels) {
 				Cell:           cell,
 			}
 		}
+		//fmt.Println(turn)
+		//time.Sleep(10 * time.Second)
+
+		// this is a local way to calculate the cell flipped
+		// inefficient but friendly and easy and local
+		/*for h := 0; h < p.ImageHeight; h++ {
+			for w := 0; w < p.ImageWidth; w++ {
+				if world[h][w] != newPixelData[h][w] {
+					cell := util.Cell{X: w, Y: h}
+					c.events <- CellFlipped{
+						CompletedTurns: turn,
+						Cell:           cell,
+					}
+				}
+			}
+		}*/
 
 		renderingSemaphore.Wait()
 		c.events <- TurnComplete{CompletedTurns: turn}
