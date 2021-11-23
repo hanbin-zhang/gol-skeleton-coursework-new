@@ -78,16 +78,12 @@ func calculateAliveCells(p Params, world [][]byte) []util.Cell {
 func saveFile(c distributorChannels, p Params, world [][]uint8, turn int) {
 
 	//fmt.Println(p)
+
+	readMutexSemaphore.Wait()
 	c.ioCommand <- ioOutput
 	outputFilename := strconv.Itoa(p.ImageWidth) + "x" + strconv.Itoa(p.ImageHeight) + "x" + strconv.Itoa(turn)
 	c.ioFilename <- outputFilename
-	readMutexSemaphore.Wait()
 	//realReadMutex.Lock()
-
-	//realReadMutex.Unlock()
-	readMutexSemaphore.Post()
-	//fmt.Println(world)
-
 	if len(world) == 0 {
 		return
 	}
@@ -96,6 +92,9 @@ func saveFile(c distributorChannels, p Params, world [][]uint8, turn int) {
 			c.ioOutput <- world[y][x]
 		}
 	}
+	//realReadMutex.Unlock()
+	readMutexSemaphore.Post()
+	//fmt.Println(world)
 
 }
 
@@ -156,7 +155,6 @@ func calculateSliceNextState(startY, endY, startX, endX int, data func(y, x int)
 func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int, isEventChannelClosed *bool) {
 
 	for {
-		//fmt.Println("sas")
 		key := <-c.keyPresses
 		switch key {
 		case 's':
@@ -318,9 +316,6 @@ func distributor(p Params, c distributorChannels) {
 	//
 	//fmt.Println("aaa")
 	saveFile(c, p, world, turn)
-
-	// TODO: output proceeded map IO
-	// TODO: Report the final state using FinalTurnCompleteEvent.
 
 	c.events <- FinalTurnComplete{CompletedTurns: p.Turns, Alive: calculateAliveCells(p, world)}
 
