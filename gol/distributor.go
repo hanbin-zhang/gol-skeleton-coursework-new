@@ -296,22 +296,6 @@ func distributor(p Params, c distributorChannels) {
 				Cell:           cell,
 			}
 		}
-		//fmt.Println(turn)
-		//time.Sleep(10 * time.Second)
-
-		// this is a local way to calculate the cell flipped
-		// inefficient but friendly and easy and local
-		/*for h := 0; h < p.ImageHeight; h++ {
-			for w := 0; w < p.ImageWidth; w++ {
-				if world[h][w] != newPixelData[h][w] {
-					cell := util.Cell{X: w, Y: h}
-					c.events <- CellFlipped{
-						CompletedTurns: turn,
-						Cell:           cell,
-					}
-				}
-			}
-		}*/
 
 		renderingSemaphore.Wait()
 		c.events <- TurnComplete{CompletedTurns: turn}
