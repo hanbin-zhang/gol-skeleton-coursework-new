@@ -216,7 +216,7 @@ func CalculateNextState(world [][]uint8, p Params) ([][]uint8, []util.Cell) {
 	if p.Threads == 1 {
 		newPixelData, flipped = calculateSliceNextState(0, p.ImageHeight, 0, p.ImageWidth, data, p)
 	} else {
-		c := make(chan workerChannels)
+		c := make(chan workerChannels, p.Threads)
 
 		for i := 0; i < p.Threads-1; i++ {
 			go worker(int(float32(p.ImageHeight)*(float32(i)/float32(p.Threads))),
