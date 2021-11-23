@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -49,7 +50,7 @@ func readPgmImage(name string, Width int, Height int, input chan uint8) {
 
 // The time taken is carefully measured by go.
 // The b.N  repetition is needed because benchmark results are not always constant.
-/*func BenchmarkCalculateNextState(b *testing.B) {
+func BenchmarkCalculateNextState(b *testing.B) {
 	os.Stdout = nil
 	height := 512
 	width := 512
@@ -61,44 +62,7 @@ func readPgmImage(name string, Width int, Height int, input chan uint8) {
 			world[h][w] = <-input
 		}
 	}
-	for n := 1; n <= 16; n++ {
-		b.Run(fmt.Sprintf("%d_threads", n), func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
-				ow := world
-				for j := 1;j<=1000;j++ {
-
-					nw,_ := gol.CalculateNextState(ow, gol.Params{Turns: 1000, ImageWidth: 512, Threads: n, ImageHeight: 512})
-					ow = nw
-				}
-
-			}
-		})
-	}
-}*/
-
-func Benchmark(b *testing.B) {
-	tests := []gol.Params{
-		{ImageWidth: 512, ImageHeight: 512},
-	}
-	for _, p := range tests {
-		for _, turns := range []int{100} {
-			p.Turns = turns
-
-			for threads := 1; threads <= 16; threads++ {
-				p.Threads = threads
-				testName := fmt.Sprintf("%dx%dx%d-%d", p.ImageWidth, p.ImageHeight, p.Turns, p.Threads)
-				b.Run(testName, func(b *testing.B) {
-					events := make(chan gol.Event)
-					go gol.Run(p, events, nil)
-					for event := range events {
-						switch e := event.(type) {
-						case gol.FinalTurnComplete:
-							fmt.Println(e)
-							break
-						}
-					}
-				})
-			}
-		}
+	for n := 0; n < b.N; n++ {
+		gol.CalculateNextState(world, gol.Params{Turns: 100, ImageWidth: 512, Threads: 16, ImageHeight: 512})
 	}
 }
