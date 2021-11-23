@@ -79,7 +79,7 @@ func calculateSliceNextState(startY, endY, startX, endX, ImageHeight, ImageWidth
 }
 
 func calculateNextState(req stubs.Request) ([][]uint8, []util.Cell) {
-	threads := req.Threads
+	threads := 1
 	world := req.World
 	data := MakeImmutableMatrix(world)
 	// iterate through the cells
