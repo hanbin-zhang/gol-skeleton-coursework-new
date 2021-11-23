@@ -165,7 +165,7 @@ func distributor(p Params, c distributorChannels) {
 	//c.events <- TurnComplete{CompletedTurns: turn}
 
 	// set the timer
-	go timer(p, &world, &turn, c.events, &isEventChannelClosed)
+	//go timer(p, &world, &turn, c.events, &isEventChannelClosed)
 
 	go checkKeyPresses(p, c, world, &turn, &isEventChannelClosed)
 
@@ -181,50 +181,26 @@ func distributor(p Params, c distributorChannels) {
 	}(client)
 
 	// iterate through the turns
-	for t := 1; t <= p.Turns; t++ {
-
-		req := stubs.BrokerRequest{
-			Threads:     p.Threads,
-			ImageWidth:  p.ImageWidth,
-			ImageHeight: p.ImageHeight,
-			World:       world,
-		}
-
-		res := new(stubs.Response)
-
-		_ = client.Call(stubs.BrokerCalculate, req, res)
-
-		nextWorld := res.NewWorld
-
-		flipped := res.FlippedCell
-
-		//a parallel way to calculate all cells flipped
-		for _, cell := range flipped {
-			c.events <- CellFlipped{
-				CompletedTurns: turn,
-				Cell:           cell,
-			}
-		}
-
-		renderingSemaphore.Wait()
-		c.events <- TurnComplete{CompletedTurns: turn}
-		renderingSemaphore.Post()
-
-		readMutexSemaphore.Wait()
-		//realReadMutex.Lock()
-		turn++
-		world = nextWorld
-		//realReadMutex.Unlock()
-		readMutexSemaphore.Post()
-
+	req := stubs.BrokerRequest{
+		Threads:     p.Threads,
+		ImageWidth:  p.ImageWidth,
+		ImageHeight: p.ImageHeight,
+		World:       world,
+		Turns:       p.Turns,
 	}
+
+	res := new(stubs.Response)
+
+	_ = client.Call(stubs.BrokerCalculate, req, res)
+
+	world = res.NewWorld
 
 	// HANBIN: sometimes, is just not too good to something too early
 	//
 	//
 	//
 	//fmt.Println("aaa")
-	saveFile(c, p, world, turn)
+	saveFile(c, p, world, p.Turns)
 
 	// TODO: output proceeded map IO
 	// TODO: Report the final state using FinalTurnCompleteEvent.

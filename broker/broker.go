@@ -90,64 +90,65 @@ func (b *Broker) CalculateNextState(req stubs.BrokerRequest, res *stubs.Response
 	presentNodeNumber := nodeNumber
 	nodeNumberMutex.Post()
 	world = req.World
-
-	if presentNodeNumber == 1 {
-		nodeRequest := stubs.Request{Threads: req.Threads,
-			SliceNumber: 0,
-			ImageWidth:  req.ImageWidth,
-			ImageHeight: req.ImageHeight,
-			StartY:      0,
-			EndY:        req.ImageHeight,
-			StartX:      0,
-			EndX:        req.ImageWidth,
-			World:       world}
-
-		requestChannel <- nodeRequest
-
-	} else {
-
-		for n := 0; n < presentNodeNumber-1; n++ {
-
+	//fmt.Println(req.Turns)
+	for t := 1; t <= req.Turns; t++ {
+		if presentNodeNumber == 1 {
 			nodeRequest := stubs.Request{Threads: req.Threads,
-				SliceNumber: n,
+				SliceNumber: 0,
 				ImageWidth:  req.ImageWidth,
 				ImageHeight: req.ImageHeight,
 				StartY:      0,
 				EndY:        req.ImageHeight,
-				StartX:      req.ImageWidth / presentNodeNumber * n,
-				EndX:        req.ImageWidth / presentNodeNumber * (n + 1),
+				StartX:      0,
+				EndX:        req.ImageWidth,
 				World:       world}
+
 			requestChannel <- nodeRequest
+
+		} else {
+
+			for n := 0; n < presentNodeNumber-1; n++ {
+
+				nodeRequest := stubs.Request{Threads: req.Threads,
+					SliceNumber: n,
+					ImageWidth:  req.ImageWidth,
+					ImageHeight: req.ImageHeight,
+					StartY:      0,
+					EndY:        req.ImageHeight,
+					StartX:      req.ImageWidth / presentNodeNumber * n,
+					EndX:        req.ImageWidth / presentNodeNumber * (n + 1),
+					World:       world}
+				requestChannel <- nodeRequest
+			}
+			lastNodeRequest := stubs.Request{Threads: req.Threads,
+				SliceNumber: presentNodeNumber - 1,
+				ImageWidth:  req.ImageWidth,
+				ImageHeight: req.ImageHeight,
+				StartY:      0,
+				EndY:        req.ImageHeight,
+				StartX:      req.ImageWidth / presentNodeNumber * (presentNodeNumber - 1),
+				EndX:        req.ImageWidth,
+				World:       world}
+
+			requestChannel <- lastNodeRequest
 		}
-		lastNodeRequest := stubs.Request{Threads: req.Threads,
-			SliceNumber: presentNodeNumber - 1,
-			ImageWidth:  req.ImageWidth,
-			ImageHeight: req.ImageHeight,
-			StartY:      0,
-			EndY:        req.ImageHeight,
-			StartX:      req.ImageWidth / presentNodeNumber * (presentNodeNumber - 1),
-			EndX:        req.ImageWidth,
-			World:       world}
 
-		requestChannel <- lastNodeRequest
+		var nextWorld [][]uint8
+		var flipped []util.Cell
+		SliceOf2DSlice := make([][][]uint8, presentNodeNumber)
+
+		for n := 0; n < presentNodeNumber; n++ {
+			response := <-responseChannel
+			SliceOf2DSlice[response.SliceNumber] = response.NewWorld
+			flipped = append(flipped, response.FlippedCell...)
+		}
+
+		//fmt.Println(SliceOf2DSlice)
+		nextWorld = Append2DSliceByColumn(SliceOf2DSlice)
+		world = nextWorld
 	}
 
-	var nextWorld [][]uint8
-	var flipped []util.Cell
-	SliceOf2DSlice := make([][][]uint8, presentNodeNumber)
-
-	for n := 0; n < presentNodeNumber; n++ {
-
-		response := <-responseChannel
-		SliceOf2DSlice[response.SliceNumber] = response.NewWorld
-		flipped = append(flipped, response.FlippedCell...)
-	}
-
-	//fmt.Println(SliceOf2DSlice)
-	nextWorld = Append2DSliceByColumn(SliceOf2DSlice)
-
-	res.NewWorld = nextWorld
-	res.FlippedCell = flipped
+	res.NewWorld = world
 
 	return err
 }
