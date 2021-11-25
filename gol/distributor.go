@@ -247,6 +247,7 @@ func runThroughTurns(client *rpc.Client, p Params, IP, port string, listener net
 		for i := 1; i <= p.Turns; i++ {
 			<-turnComplete
 		}
+
 		<-cDone
 	}
 }
