@@ -118,7 +118,7 @@ func calculateSliceNextState(startY, endY, startX, endX int, data func(y, x int)
 					newK := (k + p.ImageHeight) % p.ImageHeight
 					newL := (l + p.ImageWidth) % p.ImageWidth /*if the height/width over world height/width change */
 					if data(newK, newL) == 255 {              /* them to correct coordinates                       */
-						numberLive++ // calculate every alive cells around the target cell and itself
+						numberLive++ /// calculate every alive cells around the target cell and itself
 					}
 				}
 			}
