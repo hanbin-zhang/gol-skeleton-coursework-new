@@ -204,11 +204,11 @@ func CalculateNextState(world [][]uint8, p Params) ([][]uint8, []util.Cell) {
 		c := make(chan workerChannels)
 
 		for i := 0; i < p.Threads-1; i++ {
-			go worker(int(int32(p.ImageHeight)*(int32(i)/int32(p.Threads))),
-				int(int32(p.ImageHeight)*(int32(i+1)/int32(p.Threads))),
+			go worker((p.ImageHeight)*((i)/(p.Threads)),
+				(p.ImageHeight)*((i+1)/(p.Threads)),
 				0, p.ImageWidth, data, c, p, i)
 		}
-		go worker(int(int32(p.ImageHeight)*(int32(p.Threads-1)/int32(p.Threads))),
+		go worker((p.ImageHeight)*((p.Threads-1)/(p.Threads)),
 			p.ImageHeight,
 			0, p.ImageWidth, data, c, p, p.Threads-1)
 
