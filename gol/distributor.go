@@ -262,7 +262,7 @@ func distributor(p Params, c distributorChannels) {
 	//c.events <- TurnComplete{CompletedTurns: turn}
 
 	// set the timer
-	go timer(p, &world, &turn, c.events, &isEventChannelClosed)
+	// go timer(p, &world, &turn, c.events, &isEventChannelClosed)
 
 	go checkKeyPresses(p, c, world, &turn, &isEventChannelClosed)
 
