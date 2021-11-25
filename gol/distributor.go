@@ -90,7 +90,6 @@ func saveFile(c distributorChannels, p Params, world [][]uint8, turn int) {
 	//fmt.Println(world)
 
 	if len(world) == 0 {
-		return
 	}
 	for y := 0; y < p.ImageHeight; y++ {
 		for x := 0; x < p.ImageWidth; x++ {
@@ -106,25 +105,25 @@ func worker(startY, endY, startX, endX int, data func(y, x int) uint8, out chan 
 }
 
 func calculateSliceNextState(startY, endY, startX, endX int, data func(y, x int) uint8, p Params) ([][]uint8, []util.Cell) {
-	height := endY - startY
-	width := endX - startX
+	height := endY - startY // calculate the height of the world
+	width := endX - startX  // calculate the width of the world
 
 	nextSLice := MakeNewWorld(height, width)
 	var flippedCell []util.Cell
-	for i := startY; i < endY; i++ {
-		for j := startX; j < endX; j++ {
-			numberLive := 0
+	for i := startY; i < endY; i++ { // consider every point when height from 0 to maximum
+		for j := startX; j < endX; j++ { // consider every point when width from 0 to maximum
+			numberLive := 0 // initialize the number of live cell
 			for _, l := range [3]int{j - 1, j, j + 1} {
-				for _, k := range [3]int{i - 1, i, i + 1} {
+				for _, k := range [3]int{i - 1, i, i + 1} { //decide eight cells around the target cell
 					newK := (k + p.ImageHeight) % p.ImageHeight
-					newL := (l + p.ImageWidth) % p.ImageWidth
-					if data(newK, newL) == 255 {
-						numberLive++
+					newL := (l + p.ImageWidth) % p.ImageWidth /*if the height/width over world height/width change */
+					if data(newK, newL) == 255 {              /* them to correct coordinates                       */
+						numberLive++ // calculate every alive cells around the target cell and itself
 					}
 				}
 			}
 			if data(i, j) == 255 {
-				numberLive -= 1
+				numberLive -= 1 // remove the target cell itself, just calculate eight cells around it
 				if numberLive < 2 {
 					nextSLice[i-startY][j-startX] = 0
 					cell := util.Cell{X: j, Y: i}
@@ -204,11 +203,11 @@ func CalculateNextState(world [][]uint8, p Params) ([][]uint8, []util.Cell) {
 		c := make(chan workerChannels)
 
 		for i := 0; i < p.Threads-1; i++ {
-			go worker((p.ImageHeight)*((i)/(p.Threads)),
-				(p.ImageHeight)*((i+1)/(p.Threads)),
+			go worker(p.ImageHeight/p.Threads*i,
+				p.ImageHeight/p.Threads*(i+1),
 				0, p.ImageWidth, data, c, p, i)
 		}
-		go worker((p.ImageHeight)*((p.Threads-1)/(p.Threads)),
+		go worker(p.ImageHeight/p.Threads*(p.Threads-1),
 			p.ImageHeight,
 			0, p.ImageWidth, data, c, p, p.Threads-1)
 
@@ -310,7 +309,7 @@ func distributor(p Params, c distributorChannels) {
 
 	}
 
-	// HANBIN: sometimes, is just not too good to to something too early
+	// HANBIN: sometimes, is just not too good to something too early
 	//
 	//
 	//
