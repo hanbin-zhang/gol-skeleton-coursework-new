@@ -122,12 +122,12 @@ func calculateSliceNextState(startY, endY, startX, endX int, data func(y, x int)
 					}
 				}
 			}
-			if data(i, j) == 255 {
+			if data(i, j) == 255 { // if target cell alive
 				numberLive -= 1 // remove the target cell itself, just calculate eight cells around it
 				if numberLive < 2 {
 					nextSLice[i-startY][j-startX] = 0
-					cell := util.Cell{X: j, Y: i}
-					flippedCell = append(flippedCell, cell)
+					cell := util.Cell{X: j, Y: i}           // save state of cell in  cell
+					flippedCell = append(flippedCell, cell) // add this cell to flipped cell
 					//c.events <- CellFlipped{Cell: cell, CompletedTurns: turn}
 				} else if numberLive > 3 {
 					nextSLice[i-startY][j-startX] = 0
@@ -203,8 +203,8 @@ func CalculateNextState(world [][]uint8, p Params) ([][]uint8, []util.Cell) {
 		c := make(chan workerChannels)
 
 		for i := 0; i < p.Threads-1; i++ {
-			go worker(p.ImageHeight/p.Threads*i,
-				p.ImageHeight/p.Threads*(i+1),
+			go worker(p.ImageHeight/p.Threads*i, // divide imageheight to number of parts of threads
+				p.ImageHeight/p.Threads*(i+1), // each worker handles one part of image
 				0, p.ImageWidth, data, c, p, i)
 		}
 		go worker(p.ImageHeight/p.Threads*(p.Threads-1),
