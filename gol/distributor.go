@@ -1,6 +1,7 @@
 package gol
 
 import (
+	"fmt"
 	"github.com/ChrisGora/semaphore"
 	"strconv"
 	"time"
@@ -108,7 +109,7 @@ func worker(startY, endY, startX, endX int, data func(y, x int) uint8, out chan 
 func calculateSliceNextState(startY, endY, startX, endX int, data func(y, x int) uint8, p Params) ([][]uint8, []util.Cell) {
 	height := endY - startY
 	width := endX - startX
-
+	fmt.Println("Line took:", height)
 	nextSLice := MakeNewWorld(height, width)
 	var flippedCell []util.Cell
 	for i := startY; i < endY; i++ {
