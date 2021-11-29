@@ -194,7 +194,7 @@ func main() {
 	_ = rpc.Register(&Broker{})
 	ignitionSemaphore = semaphore.Init(1, 0)
 	clientMap = make(map[*rpc.Client]bool)
-	requestChannel = make(chan stubs.Request)
+	requestChannel = make(chan stubs.Request, 8)
 	responseChannel = make(chan stubs.Response)
 	shutDownChannel = make(chan bool)
 	nodeNumberMutex = semaphore.Init(1, 1)
