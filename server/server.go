@@ -160,7 +160,11 @@ func main() {
 		return
 	}
 
-	client, _ := rpc.Dial("tcp", *bAddr)
+	client, errDial := rpc.Dial("tcp", *bAddr)
+	if errDial != nil {
+		fmt.Println(errDial)
+		os.Exit(2)
+	}
 	defer func(client *rpc.Client) {
 		err := client.Close()
 		if err != nil {
