@@ -170,7 +170,7 @@ func ipGenerator(p Params) (string, string, string) {
 	var localIP string
 	var localPort string
 	if p.Broker == "" {
-		broker = "127.0.0.1:8030"
+		broker = "35.170.65.162:8030"
 	} else {
 		broker = p.Broker
 	}
