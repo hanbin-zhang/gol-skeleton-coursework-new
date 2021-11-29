@@ -256,6 +256,7 @@ func runThroughTurns(client *rpc.Client, p Params, IP, port string, listener net
 // distributor divides the work between workers and interacts with other goroutines.
 func distributor(p Params, c distributorChannels) {
 	broker, IP, port := ipGenerator(p)
+	IP = stubs.GetOutboundIP().String()
 
 	listener, _ := net.Listen("tcp", ":"+port)
 	_ = rpc.Register(&DistributorOperations{})
