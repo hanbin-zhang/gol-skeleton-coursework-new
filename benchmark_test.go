@@ -85,8 +85,8 @@ func BenchmarkL(b *testing.B) {
 	for _, p := range tests {
 		for _, turns := range []int{100} {
 			p.Turns = turns
-			p.Broker = "35.170.65.162:8030"
-			//p.Broker = "127.0.0.1:8030"
+			//p.Broker = "35.170.65.162:8030"
+			p.Broker = "127.0.0.1:8030"
 			for threads := 1; threads <= 16; threads++ {
 				p.Threads = threads
 				testName := fmt.Sprintf("%dx%dx%d-%d", p.ImageWidth, p.ImageHeight, p.Turns, p.Threads)
