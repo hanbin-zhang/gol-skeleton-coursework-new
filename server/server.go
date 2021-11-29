@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"net"
 	"net/rpc"
 	"os"
@@ -149,11 +150,23 @@ func (g *GolOperations) CalculateCellFlipped(req stubs.Request, res *stubs.Respo
 	return
 }
 
+func GetOutboundIP() net.IP {
+	conn, err := net.Dial("udp", "8.8.8.8:80")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer conn.Close()
+
+	localAddr := conn.LocalAddr().(*net.UDPAddr)
+
+	return localAddr.IP
+}
+
 func main() {
-	pAddr := flag.String("port", "127.0.0.1:8040", "Port to listen on")
+	pAddr := flag.String("port", "8040", "Port to listen on")
 	bAddr := flag.String("broker", "127.0.0.1:8030", "IP of broker")
 	flag.Parse()
-
+	fullIP := GetOutboundIP().String() + ":" + *pAddr
 	err := rpc.Register(&GolOperations{})
 	if err != nil {
 		fmt.Println(err)
@@ -169,11 +182,11 @@ func main() {
 		}
 	}(client)
 
-	subscribe := stubs.Subscription{NodeAddress: *pAddr, Callback: stubs.GolHandler}
+	subscribe := stubs.Subscription{NodeAddress: fullIP, Callback: stubs.GolHandler}
 	res := new(stubs.StatusReport)
 	_ = client.Go(stubs.Subscribe, subscribe, res, nil)
 
-	listener, _ := net.Listen("tcp", *pAddr)
+	listener, _ := net.Listen("tcp", ":"+*pAddr)
 	defer func(listener net.Listener) {
 		err := listener.Close()
 		if err != nil {
