@@ -1,6 +1,7 @@
 package gol
 
 import (
+	"fmt"
 	"github.com/ChrisGora/semaphore"
 	"net"
 	"net/rpc"
@@ -247,6 +248,7 @@ func runThroughTurns(client *rpc.Client, p Params, IP, port string, listener net
 		for i := 1; i <= p.Turns; i++ {
 			<-turnComplete
 		}
+
 		<-cDone
 	}
 }
@@ -278,7 +280,7 @@ func distributor(p Params, c distributorChannels) {
 	// set the timer
 	go timer(p, &world, &turn, c.events, &isEventChannelClosed)
 
-	client, _ := rpc.Dial("tcp", broker)
+	client, err := rpc.Dial("tcp", broker)
 	defer func(client *rpc.Client) {
 		err := client.Close()
 		if err != nil {
@@ -286,6 +288,11 @@ func distributor(p Params, c distributorChannels) {
 			os.Exit(2)
 		}
 	}(client)
+
+	if err != nil {
+		fmt.Println("dial error:", err)
+		os.Exit(2)
+	}
 
 	go checkKeyPresses(p, c, world, &turn, &isEventChannelClosed, &listener, client)
 
