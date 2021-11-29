@@ -41,8 +41,24 @@ func calculateSliceNextState(startY, endY, startX, endX, ImageHeight, ImageWidth
 			numberLive := 0
 			for _, l := range [3]int{j - 1, j, j + 1} {
 				for _, k := range [3]int{i - 1, i, i + 1} {
-					newK := (k + ImageHeight) % ImageHeight
-					newL := (l + ImageWidth) % ImageWidth
+					/*newK := (k + ImageHeight) % ImageHeight
+					newL := (l + ImageWidth) % ImageWidth*/
+					var newK int
+					var newL int
+					if k >= ImageHeight {
+						newK = k - ImageHeight
+					} else if k < 0 {
+						newK = k + ImageHeight
+					} else {
+						newK = k
+					}
+					if l >= ImageWidth {
+						newL = l - ImageWidth
+					} else if l < 0 {
+						newL = l + ImageWidth
+					} else {
+						newL = l
+					}
 					if data(newK, newL) == 255 {
 						numberLive++
 					}
