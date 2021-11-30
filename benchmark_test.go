@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -81,8 +82,9 @@ func Benchmark(b *testing.B) {
 		{ImageWidth: 512, ImageHeight: 512},
 	}
 	for _, p := range tests {
-		for _, turns := range []int{1000} {
+		for _, turns := range []int{100} {
 			p.Turns = turns
+			os.Stdout.Close()
 
 			for threads := 1; threads <= 16; threads++ {
 				p.Threads = threads
