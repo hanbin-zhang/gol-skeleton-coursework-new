@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -79,6 +80,7 @@ func readPgmImage(name string, Width int, Height int, input chan uint8) {
 
 func BenchmarkL(b *testing.B) {
 	os.Stdout = nil
+	log.SetOutput(ioutil.Discard)
 	tests := []gol.Params{
 		{ImageWidth: 512, ImageHeight: 512},
 	}
