@@ -206,6 +206,6 @@ func main() {
 			fmt.Println(err)
 		}
 	}(listener)
-	fmt.Println("Port :listen on:", *pAddr)
+	fmt.Println("Port :listen on:", stubs.GetOutboundIP().String(), ":", *pAddr)
 	rpc.Accept(listener)
 }
