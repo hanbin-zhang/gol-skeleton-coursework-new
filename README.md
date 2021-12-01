@@ -1,3 +1,10 @@
+running sequence:
+1: go run broker/broker.go to run the broker (listening on port 8030 by default, use -port flag to specify port to listen)
+2: go run server/server -port xxxx -broker x.x.x.x:xxxx to run the server, xxxx refer to the port used(for example, 8040)
+-broker flag specify the IP address of the broker note that to server cannot run on a single port
+3: go run . -broker x.x.x.x:xxxx -port xxxx to run the program, other flags are used as how it used to be implemented in
+the original skeleton
+
 # CSA Coursework: Game of Life
 
 **[Video Walkthrough of Parallel Component (skip to 04:20 to skip IntelliJ install and project opening steps)](https://web.microsoftstream.com/video/990e039f-4bc1-4b22-b0b1-ae895ee07163)** Please note that the rest of assignment will be introduced after reading week
