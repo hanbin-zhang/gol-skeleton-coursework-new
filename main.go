@@ -43,6 +43,23 @@ func main() {
 		false,
 		"Disables the SDL window, so there is no visualisation during the tests.")
 
+	flag.StringVar(
+		&params.Broker,
+		"broker",
+		"127.0.0.1:8030",
+		"the IP address to dial the broker")
+
+	flag.StringVar(
+		&params.LocalIP,
+		"IP",
+		"127.0.0.1",
+		"IP of the local controller")
+	flag.StringVar(
+		&params.LocalPort,
+		"port",
+		"8080",
+		"port of the local controller")
+
 	flag.Parse()
 
 	fmt.Println("Threads:", params.Threads)
