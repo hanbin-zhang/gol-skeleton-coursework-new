@@ -72,7 +72,6 @@ func readPgmImage(name string, Width int, Height int, input chan uint8) {
 					nw,_ := gol.CalculateNextState(ow, gol.Params{Turns: 1000, ImageWidth: 512, Threads: n, ImageHeight: 512})
 					ow = nw
 				}
-
 			}
 		})
 	}

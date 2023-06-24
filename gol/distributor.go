@@ -78,6 +78,7 @@ func saveFile(c distributorChannels, p Params, world [][]uint8, turn int) {
 	//fmt.Println(p)
 
 	readMutexSemaphore.Wait()
+
 	//realReadMutex.Lock()
 	c.ioCommand <- ioOutput
 	outputFilename := strconv.Itoa(p.ImageHeight) + "x" + strconv.Itoa(p.ImageWidth) + "x" + strconv.Itoa(turn)
@@ -91,6 +92,9 @@ func saveFile(c distributorChannels, p Params, world [][]uint8, turn int) {
 			c.ioOutput <- world[y][x]
 		}
 	}
+	//realReadMutex.Unlock()
+	readMutexSemaphore.Post()
+	//fmt.Println(world)
 
 	//realReadMutex.Unlock()
 	readMutexSemaphore.Post()
@@ -101,7 +105,6 @@ func saveFile(c distributorChannels, p Params, world [][]uint8, turn int) {
 func checkKeyPresses(p Params, c distributorChannels, world [][]uint8, turn *int, isEventChannelClosed *bool, listener *net.Listener, client *rpc.Client) {
 
 	for {
-		//fmt.Println("sas")
 		key := <-c.keyPresses
 		switch key {
 		case 's':
@@ -297,9 +300,11 @@ func distributor(p Params, c distributorChannels) {
 
 	go checkKeyPresses(p, c, world, &turn, &isEventChannelClosed, &listener, client)
 
+
 	// TODO: Execute all turns of the Game of Life.
 
 	runThroughTurns(client, p, IP, port, listener)
+
 
 	saveFile(c, p, world, p.Turns)
 
